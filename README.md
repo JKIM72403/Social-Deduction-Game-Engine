@@ -1,1 +1,3 @@
 # Social-Deduction-Game-Engine
+
+An engine that supports social deduction games such as Mafia or Werewolf by providing a generalized framework for defining roles, hidden and partial information, win conditions, and structured phases such as discussion, voting, and resolution. The system would enforce game rules, control information visibility, and ensure that transitions occur correctly. This project would be highly interactive and well suited for live demonstrations. The focus would be on designing a robust rule engine and state management architecture rather than graphics or presentation, ensuring that the project does not turn into building a single game but instead an engine.
