@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { API } from "../services/api";
 
 type GameTemplate = {
@@ -27,10 +29,15 @@ export default function Home() {
                 ) : (
                     <ul style={{ listStyle: "none", padding: 0 }}>
                         {games.map((game) => (
-                            <li key={game.id} style={{ border: "1px solid #ccc", padding: "1rem", marginBottom: "1rem", borderRadius: "8px" }}>
-                                <h3>{game.name}</h3>
-                                <p>Players: {game.min_players} - {game.max_players}</p>
-                            </li>
+                            <div key={game.id} style={{ border: "1px solid #ccc", padding: "1rem", marginBottom: "1rem", borderRadius: "8px", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <h3>{game.name}</h3>
+                                    <p>Players: {game.min_players} - {game.max_players}</p>
+                                </div>
+                                <Link to={`/edit-game/${game.id}`} className="btn-secondary" style={{ textDecoration: 'none', padding: '8px 16px', border: '1px solid currentColor', borderRadius: '4px' }}>
+                                    Edit
+                                </Link>
+                            </div>
                         ))}
                     </ul>
                 )}

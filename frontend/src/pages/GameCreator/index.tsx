@@ -6,18 +6,7 @@ import Step2_Roles from "./Step2_Roles";
 import Step3_Review from "./Step3_Review";
 import "./GameCreator.css";
 
-export type RoleSlot = {
-    roleId: number;
-    roleName: string;
-    count: number;
-};
-
-export type GameData = {
-    name: string;
-    min_players: number;
-    max_players: number;
-    role_slots: RoleSlot[];
-};
+import type { GameData } from "../types";
 
 export default function GameCreator() {
     const [step, setStep] = useState(1);

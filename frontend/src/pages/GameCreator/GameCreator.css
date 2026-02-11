@@ -1,7 +1,8 @@
 .game-creator-container {
     max-width: 800px;
     margin: 0 auto;
-    background: #fff;
+    background: #1e293b;
+    color: #f8fafc;
     padding: 2rem;
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -39,7 +40,9 @@
 .form-group textarea {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid #ccc;
+    background: #334155;
+    color: #fff;
+    border: 1px solid #475569;
     border-radius: 4px;
 }
 

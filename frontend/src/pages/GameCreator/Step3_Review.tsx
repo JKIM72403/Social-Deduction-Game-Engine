@@ -1,4 +1,4 @@
-import { GameData } from "./index";
+import type { GameData } from "./types";
 
 interface Props {
     data: GameData;

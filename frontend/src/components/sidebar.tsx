@@ -5,16 +5,24 @@ import ListItemText from '@mui/material/ListItemText';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import Link from '@mui/material/Link';
-import CircleIcon from '@mui/icons-material/Circle';
 import AddIcon from '@mui/icons-material/Add';
+import CircleIcon from '@mui/icons-material/Circle';
+import type { GameData } from '../types';
+
+interface SidebarProps {
+    gameData: GameData;
+    onSelect: (type: 'GAME_SETTINGS' | 'ROLE', id?: number) => void;
+    onAddRole: () => void;
+}
 
 interface SidebarSectionProps {
     title: string;
-    items: string[];
+    items: { label: string; id?: number }[];
+    onItemClick: (id?: number) => void;
+    onAdd?: () => void;
 }
 
-const SidebarSection = ({ title, items }: SidebarSectionProps) => (
+const SidebarSection = ({ title, items, onItemClick, onAdd }: SidebarSectionProps) => (
     <Box sx={{ mb: 3 }}>
         <Box sx={{
             display: 'flex',
@@ -31,28 +39,41 @@ const SidebarSection = ({ title, items }: SidebarSectionProps) => (
             <Typography variant="subtitle2" fontWeight={600}>
                 {title}
             </Typography>
-            <IconButton size="small" sx={{ p: 0.5 }}>
-                <AddIcon fontSize="small" />
-            </IconButton>
+            {onAdd && (
+                <IconButton size="small" sx={{ p: 0.5 }} onClick={(e) => { e.stopPropagation(); onAdd(); }}>
+                    <AddIcon fontSize="small" />
+                </IconButton>
+            )}
         </Box>
         <List disablePadding>
             {items.map((item, index) => (
-                <ListItem key={index} disablePadding sx={{ mb: 0.5 }}>
-                    <CircleIcon sx={{ fontSize: 6, color: 'text.secondary', mr: 1 }} />
-                    <ListItemText 
-                        primary={item} 
-                        primaryTypographyProps={{ variant: 'body2', fontSize: '0.9rem' }} 
+                <ListItem
+                    key={index}
+                    disablePadding
+                    sx={{
+                        mb: 0.5,
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: 'action.hover' }
+                    }}
+                    onClick={() => onItemClick(item.id)}
+                >
+                    <CircleIcon sx={{ fontSize: 6, color: 'text.secondary', mr: 1, ml: 1 }} />
+                    <ListItemText
+                        primary={item.label}
+                        primaryTypographyProps={{ variant: 'body2', fontSize: '0.9rem' }}
                     />
-                    <Link href="#" underline="hover" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-                        [edit]
-                    </Link>
                 </ListItem>
             ))}
+            {items.length === 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
+                    No items
+                </Typography>
+            )}
         </List>
     </Box>
 );
 
-const Sidebar = () => {
+const Sidebar = ({ gameData, onSelect, onAddRole }: SidebarProps) => {
     return (
         <Box sx={{
             width: 260,
@@ -64,28 +85,27 @@ const Sidebar = () => {
             flexDirection: 'column',
             overflowY: 'auto'
         }}>
-            <Button 
-                variant="contained" 
-                color="primary" 
-                fullWidth 
+            <Button
+                variant="contained"
+                color="primary"
+                fullWidth
                 sx={{ mb: 3, fontWeight: 'bold' }}
+                onClick={() => onSelect('GAME_SETTINGS')}
             >
-                Play Game
+                Game Settings
             </Button>
 
             <SidebarSection
                 title="Roles"
-                items={['Murderer', 'Sheriff', 'Citizen', 'Baker']}
-            />
-            
-            <SidebarSection
-                title="Phases"
-                items={['Daytime', 'Nighttime', 'Voting']}
+                items={gameData.role_slots.map(slot => ({ label: `${slot.roleName} (x${slot.count})`, id: slot.roleId }))}
+                onItemClick={(id) => onSelect('ROLE', id)}
+                onAdd={onAddRole}
             />
 
             <SidebarSection
-                title="Win Conditions"
-                items={['Killer wins', 'Citizen wins']}
+                title="Phases"
+                items={[{ label: 'Day', id: 1 }, { label: 'Night', id: 2 }]} // Placeholder
+                onItemClick={() => { }}
             />
         </Box>
     );

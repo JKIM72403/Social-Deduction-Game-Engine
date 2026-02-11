@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
 import Home from "./pages/Home";
-import GameCreator from "./pages/GameCreator/index";
+import GameEditor from "./pages/GameEditor";
 
 export default function AppRoutes() {
     return (
@@ -9,8 +9,9 @@ export default function AppRoutes() {
             <Routes>
                 <Route path="/" element={<MainLayout />}>
                     <Route index element={<Home />} />
-                    <Route path="create-game" element={<GameCreator />} />
                 </Route>
+                <Route path="create-game" element={<GameEditor />} />
+                <Route path="edit-game/:id" element={<GameEditor />} />
             </Routes>
         </BrowserRouter>
     );

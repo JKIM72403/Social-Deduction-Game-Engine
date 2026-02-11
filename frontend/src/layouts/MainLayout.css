@@ -9,13 +9,15 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background-color: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
+  background-color: #1e293b;
+  /* Dark paper color */
+  border-bottom: 1px solid #334155;
 }
 
 .header a {
   text-decoration: none;
-  color: #333;
+  color: #f8fafc;
+  /* Light text */
   margin-left: 1rem;
 }
 
