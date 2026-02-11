@@ -22,9 +22,13 @@ This platform allows users to:
 ## Project Structure
 
 ├── backend/ # Django REST API
+
 ├── frontend/ # React application
+
 ├── doc/ # Documentation
+
 ├── bin/ # Utility scripts
+
 └── sql/ # Database schemas/migrations
 
 
