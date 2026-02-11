@@ -1,0 +1,38 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.header a {
+  text-decoration: none;
+  color: #333;
+  margin-left: 1rem;
+}
+
+.header .logo a {
+  font-weight: bold;
+  font-size: 1.2rem;
+  margin-left: 0;
+}
+
+.content {
+  padding: 2rem;
+  flex: 1;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white !important;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+}

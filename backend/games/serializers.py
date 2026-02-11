@@ -18,7 +18,11 @@ class RoleTemplateSerializer(serializers.ModelSerializer):
     abilities = serializers.PrimaryKeyRelatedField(
         many=True, queryset=AbilityTemplate.objects.all(), write_only=True
     )
-    ability_details = AbilityTemplateSerializer(source="abilities.all", many=True, read_only=True)
+    ability_details = serializers.SerializerMethodField()
+
+    def get_ability_details(self, obj):
+        abilities = [ra.ability for ra in obj.abilities.all()]
+        return AbilityTemplateSerializer(abilities, many=True).data
 
     class Meta:
         model = RoleTemplate

@@ -1,8 +1,9 @@
-import HomePage from './pages/homepage';
+import AppRoutes from './AppRoutes';
+
 
 function App() {
   return (
-    <HomePage />
+    <AppRoutes />
   );
 }
 
