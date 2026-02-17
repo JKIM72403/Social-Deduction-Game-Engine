@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { API } from "../../services/api";
-import type { GameData, RoleSlot } from "../types";
+import type { GameData } from "../types";
 import RoleEditor from "../../components/RoleEditor";
 
 interface Props {
