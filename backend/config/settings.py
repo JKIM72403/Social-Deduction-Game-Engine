@@ -130,9 +130,9 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Include frontend build assets
+# Include frontend build assets (collectstatic will preserve 'assets/' subdirectory)
 STATICFILES_DIRS = [
-    BASE_DIR.parent / 'frontend/dist/assets',
+    BASE_DIR.parent / 'frontend/dist',
 ]
 
 # Modern Django 4.2+ storage configuration
