@@ -1,4 +1,4 @@
-import type { GameData } from "./types";
+import type { GameData } from "../types";
 
 interface Props {
     data: GameData;
