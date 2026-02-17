@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pymongo import MongoClient
 
 # MongoDB is optional - only initialize if URI is provided

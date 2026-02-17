@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Render build script for Django backend + React frontend
 
 set -o errexit
