@@ -12,10 +12,6 @@ npm install
 npm run build
 cd ../backend
 
-# Copy frontend assets to Django static location (keep index.html in dist/ for templates)
-mkdir -p staticfiles/assets
-cp -r ../frontend/dist/assets/* staticfiles/assets/ 2>/dev/null || true
-
 # Run migrations
 python manage.py migrate
 
