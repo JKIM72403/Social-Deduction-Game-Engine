@@ -116,7 +116,7 @@ class VotingPhase(Phase):
         counts = {}
         for target in self.votes.values():
             counts[target] = counts.get(target, 0) + 1
-        
+
         # Find max
         max_votes = 0
         candidate = None
@@ -124,7 +124,7 @@ class VotingPhase(Phase):
             if count > max_votes:
                 max_votes = count
                 candidate = target
-        
+
         if candidate and max_votes > len(self.game.get_alive_players()) // 2:
             target_player = self.game.get_player(candidate)
             if target_player:

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -7,12 +8,14 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import AddIcon from '@mui/icons-material/Add';
 import CircleIcon from '@mui/icons-material/Circle';
-import type { GameData } from '../types';
+import type { GameData, AbilityTemplate } from '../types';
+import { API } from '../services/api';
 
 interface SidebarProps {
     gameData: GameData;
-    onSelect: (type: 'GAME_SETTINGS' | 'ROLE', id?: number) => void;
+    onSelect: (type: 'GAME_SETTINGS' | 'ROLE' | 'EDIT_ABILITY_DETAILS', id?: number) => void;
     onAddRole: () => void;
+    onAddAbility: () => void;
 }
 
 interface SidebarSectionProps {
@@ -73,7 +76,16 @@ const SidebarSection = ({ title, items, onItemClick, onAdd }: SidebarSectionProp
     </Box>
 );
 
-const Sidebar = ({ gameData, onSelect, onAddRole }: SidebarProps) => {
+const Sidebar = ({ gameData, onSelect, onAddRole, onAddAbility }: SidebarProps) => {
+    const [abilities, setAbilities] = useState<AbilityTemplate[]>([]);
+
+    useEffect(() => {
+        API.get('/abilities/').then(res => setAbilities(res.data)).catch(console.error);
+    }, []);
+
+    // Refresh function could be passed down as a prop if we want the sidebar to update instantly on ability creation.
+    // However, basic implementation will fetch on mount.
+
     return (
         <Box sx={{
             width: 260,
@@ -96,16 +108,17 @@ const Sidebar = ({ gameData, onSelect, onAddRole }: SidebarProps) => {
             </Button>
 
             <SidebarSection
-                title="Roles"
+                title="Roles in Game"
                 items={gameData.role_slots.map(slot => ({ label: `${slot.roleName} (x${slot.count})`, id: slot.roleId }))}
                 onItemClick={(id) => onSelect('ROLE', id)}
                 onAdd={onAddRole}
             />
 
             <SidebarSection
-                title="Phases"
-                items={[{ label: 'Day', id: 1 }, { label: 'Night', id: 2 }]} // Placeholder
-                onItemClick={() => { }}
+                title="Global Abilities"
+                items={abilities.map(a => ({ label: `${a.name} (${a.ability_type})`, id: a.id }))}
+                onItemClick={(id) => onSelect('EDIT_ABILITY_DETAILS', id)}
+                onAdd={onAddAbility}
             />
         </Box>
     );

@@ -1,21 +1,14 @@
-import { Outlet, Link } from "react-router-dom";
-import "./MainLayout.css"; // We'll add some basic styles
+import { Outlet } from "react-router-dom";
+import { Box } from "@mui/material";
+import Navbar from "../components/navbar";
 
 export default function MainLayout() {
   return (
-    <div className="layout">
-      <header className="header">
-        <div className="logo">
-            <Link to="/">Social Deduction Engine</Link>
-        </div>
-        <nav>
-          <Link to="/">Home</Link>
-          <Link to="/create-game" className="btn-primary">Create Game</Link>
-        </nav>
-      </header>
-      <main className="content">
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: 'background.default' }}>
+      <Navbar />
+      <Box component="main" sx={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         <Outlet />
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }

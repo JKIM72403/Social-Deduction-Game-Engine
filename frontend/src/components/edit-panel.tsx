@@ -3,22 +3,51 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import RoleEditor from './RoleEditor';
+import AbilityEditor from './AbilityEditor';
 import type { GameData } from '../types';
 
 interface EditPanelProps {
-    selection: { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | { type: 'EDIT_ROLE_DETAILS', roleId: number } | null;
+    selection: { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | { type: 'EDIT_ROLE_DETAILS', roleId: number } | 
+    { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
     gameData: GameData;
     onUpdateGame: (data: Partial<GameData>) => void;
     onSaveRole: (role: any) => void;
+    onSaveAbility?: (ability: any) => void;
+    onDeleteAbility?: (abilityId: number) => void;
     onCancel: () => void;
     onEditRoleDetails: (roleId: number) => void;
 }
 
-const EditPanel = ({ selection, gameData, onUpdateGame, onSaveRole, onCancel, onEditRoleDetails }: EditPanelProps) => {
+const EditPanel = ({ selection, gameData, onUpdateGame, onSaveRole, onSaveAbility, onDeleteAbility, onCancel, onEditRoleDetails }: EditPanelProps) => {
     if (!selection) {
         return (
             <Box sx={{ width: 350, p: 3, textAlign: 'center', color: 'text.secondary' }}>
                 <Typography>Select an item to edit</Typography>
+            </Box>
+        );
+    }
+
+    if (selection.type === 'NEW_ABILITY') {
+        return (
+            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+                <AbilityEditor onSave={onSaveAbility!} onCancel={onCancel} />
+            </Box>
+        );
+    }
+
+    if (selection.type === 'EDIT_ABILITY_DETAILS') {
+        return (
+            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+                <AbilityEditor
+                    abilityId={selection.roleId} // 'roleId' holds the generic selection ID here
+                    onSave={(updatedAbility) => {
+                        onSaveAbility!(updatedAbility);
+                    }}
+                    onDelete={() => {
+                        if (onDeleteAbility) onDeleteAbility(selection.roleId);
+                    }}
+                    onCancel={onCancel}
+                />
             </Box>
         );
     }
