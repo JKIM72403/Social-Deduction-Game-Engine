@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { API } from "../services/api";
 import {
     Box, Typography, Card, CardContent, Button, FormControl, Select, MenuItem,
-    Paper, List, ListItem, ListItemText, CircularProgress, Divider, Alert
+    Paper, List, ListItem, ListItemText, CircularProgress, Divider, Alert, Snackbar
 } from "@mui/material";
 
 type Player = {
@@ -33,12 +33,68 @@ type GameState = {
     logs: string[];
 };
 
+function getPhaseGuidance(gameState: GameState) {
+    if (gameState.phase === "GAME_OVER") {
+        return {
+            title: "Game finished",
+            message: "Review the final logs and return to the catalog or restart with another template.",
+            severity: "success" as const,
+        };
+    }
+
+    if (!gameState.me.is_alive) {
+        return {
+            title: "You are eliminated",
+            message: "You can still follow the logs and player list while the remaining players finish the game.",
+            severity: "info" as const,
+        };
+    }
+
+    if (gameState.phase === "NIGHT") {
+        return gameState.me.abilities.length > 0
+            ? {
+                title: "Night phase",
+                message: "Choose one of your abilities and select a living target, then submit your action.",
+                severity: "info" as const,
+            }
+            : {
+                title: "Night phase",
+                message: "You do not have a night ability. Submit to skip and let the night resolve.",
+                severity: "info" as const,
+            };
+    }
+
+    if (gameState.phase === "VOTING") {
+        return {
+            title: "Voting phase",
+            message: "Select one living player to vote for elimination this turn.",
+            severity: "warning" as const,
+        };
+    }
+
+    if (gameState.phase === "DAY") {
+        return {
+            title: "Day phase",
+            message: "Review the latest events, discuss, and end the day when you are ready to proceed.",
+            severity: "info" as const,
+        };
+    }
+
+    return {
+        title: `Phase: ${gameState.phase}`,
+        message: "Follow the on-screen action panel for the next available move.",
+        severity: "info" as const,
+    };
+}
+
 export default function PlayGame() {
     const { id: templateId } = useParams();
     const navigate = useNavigate();
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [actionError, setActionError] = useState<string | null>(null);
 
     // Form states
     const [selectedAbility, setSelectedAbility] = useState<number>(0);
@@ -58,25 +114,33 @@ export default function PlayGame() {
             });
     }, [templateId]);
 
-    const handleAction = (actionData: any) => {
-        if (!gameState) return;
-        API.post(`/game-sessions/${gameState.session_id}/act/`, {
-            user_name: "You",
-            action: actionData
-        })
-            .then((res) => {
-                setGameState(res.data);
-            })
-            .catch((err) => console.error("Action failed", err));
+    const handleAction = async (actionData: any) => {
+        if (!gameState || isSubmitting) return;
+
+        setIsSubmitting(true);
+        setActionError(null);
+
+        try {
+            const res = await API.post(`/game-sessions/${gameState.session_id}/act/`, {
+                user_name: "You",
+                action: actionData
+            });
+            setGameState(res.data);
+        } catch (err: any) {
+            console.error("Action failed", err);
+            setActionError(err?.response?.data?.error || "Action failed. Please try again.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const submitNightAction = (e: React.FormEvent) => {
         e.preventDefault();
         if (gameState?.me.abilities.length === 0) {
-            handleAction(null); // Just skip
+            void handleAction(null); // Just skip
             return;
         }
-        handleAction({
+        void handleAction({
             ability_index: selectedAbility,
             target: selectedTarget
         });
@@ -84,7 +148,7 @@ export default function PlayGame() {
 
     const submitVoteAction = (e: React.FormEvent) => {
         e.preventDefault();
-        handleAction({
+        void handleAction({
             action: "vote",
             target: selectedTarget
         });
@@ -107,6 +171,10 @@ export default function PlayGame() {
             <Alert severity="warning">Game state not found.</Alert>
         </Box>
     );
+
+    const phaseGuidance = getPhaseGuidance(gameState);
+    const alivePlayers = gameState.players.filter((p) => p.is_alive);
+    const eliminatedPlayers = gameState.players.filter((p) => !p.is_alive);
 
     return (
         <Box sx={{ maxWidth: 900, mx: 'auto', mt: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -132,6 +200,11 @@ export default function PlayGame() {
                 </Box>
             </Paper>
 
+            <Alert severity={phaseGuidance.severity}>
+                <Typography variant="subtitle2">{phaseGuidance.title}</Typography>
+                <Typography variant="body2">{phaseGuidance.message}</Typography>
+            </Alert>
+
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
                 <Card sx={{ height: 400, display: 'flex', flexDirection: 'column' }}>
                     <CardContent sx={{ flexGrow: 1, overflowY: 'auto' }}>
@@ -151,21 +224,48 @@ export default function PlayGame() {
                     <CardContent sx={{ flexGrow: 1, overflowY: 'auto' }}>
                         <Typography variant="h6" gutterBottom>Players</Typography>
                         <Divider sx={{ mb: 2 }} />
-                        <List disablePadding>
-                            {gameState.players.map(p => (
+                        <Typography variant="subtitle2" color="success.main" sx={{ mb: 1 }}>
+                            Alive ({alivePlayers.length})
+                        </Typography>
+                        <List disablePadding sx={{ mb: eliminatedPlayers.length > 0 ? 2 : 0 }}>
+                            {alivePlayers.map(p => (
                                 <ListItem key={p.name} disablePadding sx={{ mb: 1 }}>
-                                    <ListItemText 
-                                        primary={p.name} 
-                                        secondary={!p.is_alive ? p.role : null}
-                                        sx={{ 
-                                            textDecoration: p.is_alive ? 'none' : 'line-through',
-                                            color: p.is_alive ? 'text.primary' : 'text.disabled'
+                                    <ListItemText
+                                        primary={p.name === gameState.me.name ? `${p.name} (You)` : p.name}
+                                        primaryTypographyProps={{
+                                            fontWeight: p.name === gameState.me.name ? 700 : 400,
+                                            color: p.name === gameState.me.name ? 'primary.main' : 'text.primary'
                                         }}
-                                        secondaryTypographyProps={{ color: 'error.main' }}
                                     />
                                 </ListItem>
                             ))}
                         </List>
+
+                        {eliminatedPlayers.length > 0 && (
+                            <>
+                                <Typography variant="subtitle2" color="error.main" sx={{ mb: 1 }}>
+                                    Eliminated ({eliminatedPlayers.length})
+                                </Typography>
+                                <List disablePadding>
+                                    {eliminatedPlayers.map(p => (
+                                        <ListItem key={p.name} disablePadding sx={{ mb: 1 }}>
+                                            <ListItemText
+                                                primary={p.name === gameState.me.name ? `${p.name} (You)` : p.name}
+                                                secondary={p.role}
+                                                sx={{
+                                                    textDecoration: 'line-through',
+                                                    color: 'text.disabled'
+                                                }}
+                                                primaryTypographyProps={{
+                                                    fontWeight: p.name === gameState.me.name ? 700 : 400
+                                                }}
+                                                secondaryTypographyProps={{ color: 'error.main' }}
+                                            />
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            </>
+                        )}
                     </CardContent>
                 </Card>
             </Box>
@@ -181,13 +281,19 @@ export default function PlayGame() {
                         <Box>
                             {gameState.phase === "NIGHT" && (
                                 <form onSubmit={submitNightAction}>
-                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                        {gameState.me.abilities.length > 0
+                                            ? "Night actions happen in secret. Pick an ability and target."
+                                            : "You have no night actions this turn. Submit to continue."}
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                                         {gameState.me.abilities.length > 0 ? (
                                             <>
                                                 <FormControl size="small" sx={{ minWidth: 150 }}>
                                                     <Select
                                                         value={selectedAbility}
                                                         onChange={e => setSelectedAbility(Number(e.target.value))}
+                                                        disabled={isSubmitting}
                                                     >
                                                         {gameState.me.abilities.map(ab => (
                                                             <MenuItem key={ab.index} value={ab.index}>{ab.name}</MenuItem>
@@ -201,6 +307,7 @@ export default function PlayGame() {
                                                         onChange={e => setSelectedTarget(e.target.value)}
                                                         displayEmpty
                                                         required
+                                                        disabled={isSubmitting}
                                                     >
                                                         <MenuItem value="" disabled>Select Target</MenuItem>
                                                         {gameState.players.filter(p => p.is_alive).map(p => (
@@ -208,15 +315,15 @@ export default function PlayGame() {
                                                         ))}
                                                     </Select>
                                                 </FormControl>
-                                                <Button type="submit" variant="contained" color="success">
-                                                    Use Ability
+                                                <Button type="submit" variant="contained" color="success" disabled={isSubmitting}>
+                                                    {isSubmitting ? "Submitting..." : "Use Ability"}
                                                 </Button>
                                             </>
                                         ) : (
                                             <>
                                                 <Typography>No abilities to use tonight.</Typography>
-                                                <Button type="submit" variant="contained" color="inherit">
-                                                    Sleep
+                                                <Button type="submit" variant="contained" color="inherit" disabled={isSubmitting}>
+                                                    {isSubmitting ? "Submitting..." : "Sleep"}
                                                 </Button>
                                             </>
                                         )}
@@ -226,13 +333,17 @@ export default function PlayGame() {
 
                             {gameState.phase === "VOTING" && (
                                 <form onSubmit={submitVoteAction}>
-                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                        Cast one vote against a living player. Bots will vote after your action.
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                                         <FormControl size="small" sx={{ minWidth: 150 }}>
                                             <Select
                                                 value={selectedTarget}
                                                 onChange={e => setSelectedTarget(e.target.value)}
                                                 displayEmpty
                                                 required
+                                                disabled={isSubmitting}
                                             >
                                                 <MenuItem value="" disabled>Select Target</MenuItem>
                                                 {gameState.players.filter(p => p.is_alive).map(p => (
@@ -240,8 +351,8 @@ export default function PlayGame() {
                                                 ))}
                                             </Select>
                                         </FormControl>
-                                        <Button type="submit" variant="contained" color="error">
-                                            Vote to Eliminate
+                                        <Button type="submit" variant="contained" color="error" disabled={isSubmitting}>
+                                            {isSubmitting ? "Submitting..." : "Vote to Eliminate"}
                                         </Button>
                                     </Box>
                                 </form>
@@ -249,9 +360,9 @@ export default function PlayGame() {
 
                             {gameState.phase === "DAY" && (
                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <Typography>Discuss with the town.</Typography>
-                                    <Button onClick={() => handleAction(null)} variant="contained" color="warning">
-                                        End Day
+                                    <Typography>Read the logs and player list, then end the day to move to voting.</Typography>
+                                    <Button onClick={() => void handleAction(null)} variant="contained" color="warning" disabled={isSubmitting}>
+                                        {isSubmitting ? "Submitting..." : "End Day"}
                                     </Button>
                                 </Box>
                             )}
@@ -271,6 +382,17 @@ export default function PlayGame() {
                     </Button>
                 </Paper>
             )}
+
+            <Snackbar
+                open={Boolean(actionError)}
+                autoHideDuration={5000}
+                onClose={() => setActionError(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert onClose={() => setActionError(null)} severity="error" sx={{ width: '100%' }}>
+                    {actionError}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 }
