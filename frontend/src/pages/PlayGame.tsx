@@ -33,6 +33,60 @@ type GameState = {
     logs: string[];
 };
 
+function getPhaseGuidance(gameState: GameState) {
+    if (gameState.phase === "GAME_OVER") {
+        return {
+            title: "Game finished",
+            message: "Review the final logs and return to the catalog or restart with another template.",
+            severity: "success" as const,
+        };
+    }
+
+    if (!gameState.me.is_alive) {
+        return {
+            title: "You are eliminated",
+            message: "You can still follow the logs and player list while the remaining players finish the game.",
+            severity: "info" as const,
+        };
+    }
+
+    if (gameState.phase === "NIGHT") {
+        return gameState.me.abilities.length > 0
+            ? {
+                title: "Night phase",
+                message: "Choose one of your abilities and select a living target, then submit your action.",
+                severity: "info" as const,
+            }
+            : {
+                title: "Night phase",
+                message: "You do not have a night ability. Submit to skip and let the night resolve.",
+                severity: "info" as const,
+            };
+    }
+
+    if (gameState.phase === "VOTING") {
+        return {
+            title: "Voting phase",
+            message: "Select one living player to vote for elimination this turn.",
+            severity: "warning" as const,
+        };
+    }
+
+    if (gameState.phase === "DAY") {
+        return {
+            title: "Day phase",
+            message: "Review the latest events, discuss, and end the day when you are ready to proceed.",
+            severity: "info" as const,
+        };
+    }
+
+    return {
+        title: `Phase: ${gameState.phase}`,
+        message: "Follow the on-screen action panel for the next available move.",
+        severity: "info" as const,
+    };
+}
+
 export default function PlayGame() {
     const { id: templateId } = useParams();
     const navigate = useNavigate();
@@ -108,6 +162,8 @@ export default function PlayGame() {
         </Box>
     );
 
+    const phaseGuidance = getPhaseGuidance(gameState);
+
     return (
         <Box sx={{ maxWidth: 900, mx: 'auto', mt: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
             <Paper sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -131,6 +187,11 @@ export default function PlayGame() {
                     </Typography>
                 </Box>
             </Paper>
+
+            <Alert severity={phaseGuidance.severity}>
+                <Typography variant="subtitle2">{phaseGuidance.title}</Typography>
+                <Typography variant="body2">{phaseGuidance.message}</Typography>
+            </Alert>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 3 }}>
                 <Card sx={{ height: 400, display: 'flex', flexDirection: 'column' }}>
@@ -181,6 +242,11 @@ export default function PlayGame() {
                         <Box>
                             {gameState.phase === "NIGHT" && (
                                 <form onSubmit={submitNightAction}>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                        {gameState.me.abilities.length > 0
+                                            ? "Night actions happen in secret. Pick an ability and target."
+                                            : "You have no night actions this turn. Submit to continue."}
+                                    </Typography>
                                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                         {gameState.me.abilities.length > 0 ? (
                                             <>
@@ -226,6 +292,9 @@ export default function PlayGame() {
 
                             {gameState.phase === "VOTING" && (
                                 <form onSubmit={submitVoteAction}>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                        Cast one vote against a living player. Bots will vote after your action.
+                                    </Typography>
                                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                         <FormControl size="small" sx={{ minWidth: 150 }}>
                                             <Select
@@ -249,7 +318,7 @@ export default function PlayGame() {
 
                             {gameState.phase === "DAY" && (
                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <Typography>Discuss with the town.</Typography>
+                                    <Typography>Read the logs and player list, then end the day to move to voting.</Typography>
                                     <Button onClick={() => handleAction(null)} variant="contained" color="warning">
                                         End Day
                                     </Button>
