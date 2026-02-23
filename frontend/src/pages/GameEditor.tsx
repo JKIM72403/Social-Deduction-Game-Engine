@@ -18,6 +18,76 @@ import { useNavigate, useParams } from 'react-router-dom';
 type Selection = { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | 
 { type: 'EDIT_ROLE_DETAILS', roleId: number } | { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
 
+type GameValidationState = {
+    errors: string[];
+    totalRoleSlots: number;
+    minPlayersError?: string;
+    maxPlayersError?: string;
+    roleSlotErrors: Record<number, string>;
+};
+
+function getGameValidationState(gameData: GameData): GameValidationState {
+    const errors: string[] = [];
+    const { min_players, max_players, role_slots } = gameData;
+    const roleSlotErrors: Record<number, string> = {};
+
+    const minIsValid = Number.isInteger(min_players) && min_players >= 1;
+    const maxIsValid = Number.isInteger(max_players) && max_players >= 1;
+    const totalRoleSlots = role_slots.reduce((sum, slot) => sum + (Number.isFinite(slot.count) ? slot.count : 0), 0);
+    let minPlayersError: string | undefined;
+    let maxPlayersError: string | undefined;
+
+    if (!minIsValid) {
+        minPlayersError = "Enter a whole number of at least 1.";
+        errors.push("Min Players must be a whole number of at least 1.");
+    }
+
+    if (!maxIsValid) {
+        maxPlayersError = "Enter a whole number of at least 1.";
+        errors.push("Max Players must be a whole number of at least 1.");
+    }
+
+    if (minIsValid && maxIsValid && min_players > max_players) {
+        minPlayersError = "Min Players cannot be greater than Max Players.";
+        maxPlayersError = "Max Players must be at least Min Players.";
+        errors.push("Min Players cannot be greater than Max Players.");
+    }
+
+    if (role_slots.length === 0) {
+        errors.push("Add at least one role slot before saving.");
+    }
+
+    const invalidSlots = role_slots.filter(
+        (slot) => !Number.isInteger(slot.count) || slot.count <= 0
+    );
+
+    if (invalidSlots.length > 0) {
+        invalidSlots.forEach((slot) => {
+            roleSlotErrors[slot.roleId] = "Count must be a positive whole number.";
+        });
+        const slotNames = invalidSlots.map((slot) => slot.roleName).join(", ");
+        errors.push(`All role slot counts must be positive whole numbers. Fix: ${slotNames}.`);
+    }
+
+    if (minIsValid && invalidSlots.length === 0 && totalRoleSlots < min_players) {
+        minPlayersError = `Total role slots (${totalRoleSlots}) is below Min Players (${min_players}).`;
+        errors.push(`Total role slots (${totalRoleSlots}) must be at least Min Players (${min_players}).`);
+    }
+
+    if (maxIsValid && invalidSlots.length === 0 && totalRoleSlots > max_players) {
+        maxPlayersError = `Total role slots (${totalRoleSlots}) exceeds Max Players (${max_players}).`;
+        errors.push(`Total role slots (${totalRoleSlots}) cannot exceed Max Players (${max_players}).`);
+    }
+
+    return {
+        errors,
+        totalRoleSlots,
+        minPlayersError,
+        maxPlayersError,
+        roleSlotErrors,
+    };
+}
+
 const GameEditor = () => {
     const navigate = useNavigate();
     const { id } = useParams();
@@ -32,6 +102,10 @@ const GameEditor = () => {
     const [selection, setSelection] = useState<Selection>({ type: 'GAME_SETTINGS' });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const validationState = getGameValidationState(gameData);
+    const validationErrors = validationState.errors;
+    const hasValidationErrors = validationErrors.length > 0;
+    const totalRoleSlots = validationState.totalRoleSlots;
 
     useEffect(() => {
         if (id) {
@@ -104,6 +178,11 @@ const GameEditor = () => {
     };
 
     const handleSaveGame = async () => {
+        if (hasValidationErrors) {
+            setSnackbar({ open: true, message: "Fix validation errors before saving.", severity: 'error' });
+            return;
+        }
+
         try {
             const payload = {
                 name: gameData.name,
@@ -191,7 +270,29 @@ const GameEditor = () => {
                         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                             {gameData.role_slots.length} Roles Configured
                         </Typography>
+                        <Typography
+                            variant="body2"
+                            color={hasValidationErrors ? 'error.main' : 'text.secondary'}
+                            sx={{ mt: 0.5 }}
+                        >
+                            Total Role Slots: {totalRoleSlots}
+                        </Typography>
                     </Box>
+
+                    {hasValidationErrors && (
+                        <Alert severity="error" sx={{ width: '100%', maxWidth: 640 }}>
+                            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                                Fix these issues before saving:
+                            </Typography>
+                            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                                {validationErrors.map((error, idx) => (
+                                    <Box component="li" key={idx} sx={{ mb: 0.5 }}>
+                                        <Typography variant="body2">{error}</Typography>
+                                    </Box>
+                                ))}
+                            </Box>
+                        </Alert>
+                    )}
 
                     <Box sx={{ display: 'flex', gap: 2 }}>
                         {id && (
@@ -199,7 +300,13 @@ const GameEditor = () => {
                                 Delete Game
                             </Button>
                         )}
-                        <Button variant="contained" color="primary" onClick={handleSaveGame} size="large">
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleSaveGame}
+                            size="large"
+                            disabled={hasValidationErrors}
+                        >
                             Save Game
                         </Button>
                     </Box>
@@ -208,6 +315,7 @@ const GameEditor = () => {
                 <EditPanel
                     selection={selection}
                     gameData={gameData}
+                    validationState={validationState}
                     onUpdateGame={handleUpdateGame}
                     onSaveRole={handleRoleSaved}
                     onSaveAbility={handleAbilitySaved}
