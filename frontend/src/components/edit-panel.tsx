@@ -6,10 +6,19 @@ import RoleEditor from './RoleEditor';
 import AbilityEditor from './AbilityEditor';
 import type { GameData } from '../types';
 
+interface GameValidationState {
+    errors: string[];
+    totalRoleSlots: number;
+    minPlayersError?: string;
+    maxPlayersError?: string;
+    roleSlotErrors: Record<number, string>;
+}
+
 interface EditPanelProps {
     selection: { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | { type: 'EDIT_ROLE_DETAILS', roleId: number } | 
     { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
     gameData: GameData;
+    validationState: GameValidationState;
     onUpdateGame: (data: Partial<GameData>) => void;
     onSaveRole: (role: any) => void;
     onSaveAbility?: (ability: any) => void;
@@ -18,7 +27,7 @@ interface EditPanelProps {
     onEditRoleDetails: (roleId: number) => void;
 }
 
-const EditPanel = ({ selection, gameData, onUpdateGame, onSaveRole, onSaveAbility, onDeleteAbility, onCancel, onEditRoleDetails }: EditPanelProps) => {
+const EditPanel = ({ selection, gameData, validationState, onUpdateGame, onSaveRole, onSaveAbility, onDeleteAbility, onCancel, onEditRoleDetails }: EditPanelProps) => {
     if (!selection) {
         return (
             <Box sx={{ width: 350, p: 3, textAlign: 'center', color: 'text.secondary' }}>
@@ -93,12 +102,16 @@ const EditPanel = ({ selection, gameData, onUpdateGame, onSaveRole, onSaveAbilit
                         label="Min Players"
                         value={gameData.min_players}
                         onChange={(e) => onUpdateGame({ min_players: parseInt(e.target.value) })}
+                        error={Boolean(validationState.minPlayersError)}
+                        helperText={validationState.minPlayersError || `Total role slots: ${validationState.totalRoleSlots}`}
                     />
                     <TextField
                         type="number"
                         label="Max Players"
                         value={gameData.max_players}
                         onChange={(e) => onUpdateGame({ max_players: parseInt(e.target.value) })}
+                        error={Boolean(validationState.maxPlayersError)}
+                        helperText={validationState.maxPlayersError || "Set the upper player limit for this template."}
                     />
                 </Box>
             </Box>
@@ -131,6 +144,8 @@ const EditPanel = ({ selection, gameData, onUpdateGame, onSaveRole, onSaveAbilit
                             onUpdateGame({ role_slots: newSlots });
                         }
                     }}
+                    error={Boolean(validationState.roleSlotErrors[slot.roleId])}
+                    helperText={validationState.roleSlotErrors[slot.roleId] || `Total role slots: ${validationState.totalRoleSlots}`}
                     fullWidth
                     sx={{ mb: 3 }}
                 />
