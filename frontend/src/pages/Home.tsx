@@ -9,18 +9,22 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 import { API } from "../services/api";
+import { useAuth } from "../contexts/AuthContext";
 
 type GameTemplate = {
     id: number;
     name: string;
     min_players: number;
     max_players: number;
+    creator_id: number | null;
+    creator_name: string | null;
 };
 
 export default function Home() {
+    const { user } = useAuth();
     const [games, setGames] = useState<GameTemplate[]>([]);
     const [loading, setLoading] = useState(true);
-    
+
     const [deleteGame, setDeleteGame] = useState<GameTemplate | null>(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
@@ -54,13 +58,15 @@ export default function Home() {
         }
     };
 
+    const isOwner = (game: GameTemplate) => user !== null && game.creator_id === user.id;
+
     return (
         <Box sx={{ p: 4, maxWidth: 1200, mx: 'auto' }}>
             <Typography variant="h4" gutterBottom>
                 Game Templates
             </Typography>
             <Typography variant="body1" color="text.secondary" gutterBottom>
-                Select a game to modify or create a new one.
+                Select a game to play, or create a new one.
             </Typography>
 
             <Box sx={{ mt: 4 }}>
@@ -80,6 +86,9 @@ export default function Home() {
                                         <Typography variant="body2" color="text.secondary">
                                             Players: {game.min_players} - {game.max_players}
                                         </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            by {game.creator_name || "Unknown"}
+                                        </Typography>
                                     </CardContent>
                                     <CardActions sx={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -92,23 +101,27 @@ export default function Home() {
                                             >
                                                 Play
                                             </Button>
+                                            {isOwner(game) && (
+                                                <Button
+                                                    size="small"
+                                                    variant="outlined"
+                                                    color="secondary"
+                                                    component={RouterLink}
+                                                    to={`/edit-game/${game.id}`}
+                                                >
+                                                    Edit
+                                                </Button>
+                                            )}
+                                        </Box>
+                                        {isOwner(game) && (
                                             <Button
                                                 size="small"
-                                                variant="outlined"
-                                                color="secondary"
-                                                component={RouterLink}
-                                                to={`/edit-game/${game.id}`}
+                                                color="error"
+                                                onClick={() => setDeleteGame(game)}
                                             >
-                                                Edit
+                                                Delete
                                             </Button>
-                                        </Box>
-                                        <Button
-                                            size="small"
-                                            color="error"
-                                            onClick={() => setDeleteGame(game)}
-                                        >
-                                            Delete
-                                        </Button>
+                                        )}
                                     </CardActions>
                                 </Card>
                             </Box>

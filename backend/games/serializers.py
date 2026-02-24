@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.models import User
 from .models import RoleTemplate, AbilityTemplate, RoleAbility, GameTemplate, GameRoleSlot
 
 
@@ -61,10 +62,15 @@ class GameRoleSlotSerializer(serializers.ModelSerializer):
 
 class GameTemplateSerializer(serializers.ModelSerializer):
     role_slots = GameRoleSlotSerializer(many=True)
+    creator_name = serializers.SerializerMethodField()
+    creator_id = serializers.IntegerField(source='creator.id', read_only=True, default=None)
 
     class Meta:
         model = GameTemplate
-        fields = ["id", "name", "min_players", "max_players", "role_slots"]
+        fields = ["id", "name", "min_players", "max_players", "role_slots", "creator_name", "creator_id"]
+
+    def get_creator_name(self, obj):
+        return obj.creator.username if obj.creator else None
 
     def create(self, validated_data):
         role_slots_data = validated_data.pop("role_slots")
@@ -90,3 +96,35 @@ class GameTemplateSerializer(serializers.ModelSerializer):
 
         return instance
 
+# --- Auth Serializers ---
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email']
+
+
+class SignupSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField(required=False, default='')
+    password = serializers.CharField(write_only=True)
+    password_confirm = serializers.CharField(write_only=True)
+
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already taken.")
+        return value
+
+    def validate(self, data):
+        if data['password'] != data['password_confirm']:
+            raise serializers.ValidationError({"password_confirm": "Passwords do not match."})
+        return data
+
+    def create(self, validated_data):
+        validated_data.pop('password_confirm')
+        return User.objects.create_user(**validated_data)
+
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
