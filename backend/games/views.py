@@ -3,13 +3,14 @@ from django.contrib.auth import authenticate
 import uuid
 import random
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
-from .models import RoleTemplate, AbilityTemplate, GameTemplate
+from .models import RoleTemplate, AbilityTemplate, GameTemplate, PhaseTemplate, WinConditionTemplate
 from .serializers import (
     RoleTemplateSerializer, AbilityTemplateSerializer, GameTemplateSerializer,
+    PhaseTemplateSerializer, WinConditionTemplateSerializer,
     UserSerializer, SignupSerializer, LoginSerializer,
 )
 from .engine_builder import build_game_engine
@@ -49,6 +50,28 @@ class AbilityTemplateViewSet(viewsets.ModelViewSet):
 class RoleTemplateViewSet(viewsets.ModelViewSet):
     queryset = RoleTemplate.objects.all()
     serializer_class = RoleTemplateSerializer
+
+class PhaseTemplateViewSet(viewsets.ModelViewSet):
+    queryset = PhaseTemplate.objects.all()
+    serializer_class = PhaseTemplateSerializer
+
+    @action(detail=False, methods=['post'])
+    def reorder(self, request):
+        orders = request.data.get('orders', []) # [{"id": 1, "order": 0}, ...]
+        for item in orders:
+            PhaseTemplate.objects.filter(id=item['id']).update(order=item['order'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class WinConditionTemplateViewSet(viewsets.ModelViewSet):
+    queryset = WinConditionTemplate.objects.all()
+    serializer_class = WinConditionTemplateSerializer
+
+    @action(detail=False, methods=['post'])
+    def reorder(self, request):
+        orders = request.data.get('orders', []) # [{"id": 1, "order": 0}, ...]
+        for item in orders:
+            WinConditionTemplate.objects.filter(id=item['id']).update(order=item['order'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 class GameTemplateViewSet(viewsets.ModelViewSet):
     queryset = GameTemplate.objects.all()

@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     RoleTemplateViewSet, AbilityTemplateViewSet, GameTemplateViewSet,
+    PhaseTemplateViewSet, WinConditionTemplateViewSet,
     start_game_session, game_session_action,
     signup_view, login_view, me_view,
 )
@@ -10,6 +11,8 @@ router = DefaultRouter()
 router.register(r'roles', RoleTemplateViewSet)
 router.register(r'abilities', AbilityTemplateViewSet)
 router.register(r'game-templates', GameTemplateViewSet)
+router.register(r'phases', PhaseTemplateViewSet)
+router.register(r'win-conditions', WinConditionTemplateViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

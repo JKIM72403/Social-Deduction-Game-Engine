@@ -63,3 +63,39 @@ class GameRoleSlot(models.Model):
 
     def __str__(self):
         return f"{self.game_template.name}: {self.role.name} x{self.count}"
+
+
+class PhaseTemplate(models.Model):
+    PHASE_TYPES = [
+        ("NIGHT", "Night"),
+        ("DAY", "Day"),
+        ("VOTING", "Voting"),
+    ]
+    game_template = models.ForeignKey(GameTemplate, related_name="phases", on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    phase_type = models.CharField(max_length=20, choices=PHASE_TYPES)
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.game_template.name} - {self.name} ({self.order})"
+
+
+class WinConditionTemplate(models.Model):
+    ALIGNMENTS = RoleTemplate.ALIGNMENTS
+
+    game_template = models.ForeignKey(GameTemplate, related_name="win_conditions", on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    winner_alignment = models.CharField(max_length=20, choices=ALIGNMENTS, default="TOWN")
+    
+    # JSON structure: [{"type": "ROLE_COUNT", "target": role_id, "count": 0}, ...]
+    criteria = models.JSONField(default=list)
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.game_template.name} - {self.name} (Winner: {self.winner_alignment})"

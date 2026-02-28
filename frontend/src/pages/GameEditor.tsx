@@ -12,11 +12,11 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Sidebar from '../components/sidebar';
 import EditPanel from '../components/edit-panel';
 import { API } from '../services/api';
-import type { GameData, RoleSlot } from '../types';
+import type { GameData, Phase, WinCondition, RoleSlot } from '../types';
+import type { Selection } from '../components/edit-panel';
 import { useNavigate, useParams } from 'react-router-dom';
 
-type Selection = { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | 
-{ type: 'EDIT_ROLE_DETAILS', roleId: number } | { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
+// Selection type moved to edit-panel.tsx for sharing
 
 type GameValidationState = {
     errors: string[];
@@ -95,10 +95,27 @@ const GameEditor = () => {
         name: "New Game",
         min_players: 4,
         max_players: 10,
-        role_slots: []
+        role_slots: [],
+        phases: [
+            { name: "Night (default)", phase_type: "NIGHT", order: 0 },
+            { name: "Day (default)", phase_type: "DAY", order: 1 },
+            { name: "Voting (default)", phase_type: "VOTING", order: 2 }
+        ],
+        win_conditions: [
+            {
+                name: "Town Victory (default)",
+                winner_alignment: "TOWN",
+                order: 0,
+                criteria: [{ type: "ALIGNMENT_COUNT", target: "MAFIA", count: 0 }]
+            },
+            {
+                name: "Mafia Victory (default)",
+                winner_alignment: "MAFIA",
+                order: 1,
+                criteria: [{ type: "ALIGNMENT_COUNT", target: "TOWN", count: 0 }]
+            }
+        ]
     });
-    // This state variable key forces the Sidebar to remount/re-fetch abilities when an ability is saved
-    const [abilityUpdateKey, setAbilityUpdateKey] = useState(0); 
     const [selection, setSelection] = useState<Selection>({ type: 'GAME_SETTINGS' });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -119,10 +136,13 @@ const GameEditor = () => {
                         count: s.count
                     }));
                     setGameData({
+                        id: data.id,
                         name: data.name,
                         min_players: data.min_players,
                         max_players: data.max_players,
-                        role_slots: role_slots
+                        role_slots: role_slots,
+                        phases: data.phases || [],
+                        win_conditions: data.win_conditions || []
                     });
                 })
                 .catch(err => {
@@ -138,17 +158,13 @@ const GameEditor = () => {
     };
 
     const handleRoleSaved = (role: any) => {
-        // If it's a new role (not in slots), add it.
-        // If it's an existing role, just update name in slots if needed.
         setGameData(prev => {
             const existingSlotIndex = prev.role_slots.findIndex(s => s.roleId === role.id);
             if (existingSlotIndex >= 0) {
-                // Update name if changed
                 const newSlots = [...prev.role_slots];
                 newSlots[existingSlotIndex] = { ...newSlots[existingSlotIndex], roleName: role.name };
                 return { ...prev, role_slots: newSlots };
             } else {
-                // Add new role slot
                 const newSlot: RoleSlot = {
                     roleId: role.id,
                     roleName: role.name,
@@ -157,21 +173,71 @@ const GameEditor = () => {
                 return { ...prev, role_slots: [...prev.role_slots, newSlot] };
             }
         });
-
-        // Go back to the role slot view
-        setSelection({ type: 'ROLE', roleId: role.id });
+        setSelection({ type: 'ROLE', id: role.id });
     };
 
-    const handleAbilitySaved = (ability: any) => {
-        setAbilityUpdateKey(prev => prev + 1); // trigger sidebar re-fetch
-        setSelection({ type: 'EDIT_ABILITY_DETAILS', roleId: ability.id }); // Using roleId as a loosely 
-        // structured generic ID here based on the Selection type definition
+    const handlePhaseSaved = (phase: Phase, index?: number) => {
+        setGameData(prev => {
+            const newPhases = [...prev.phases];
+            if (index !== undefined && index >= 0) {
+                newPhases[index] = phase;
+            } else {
+                newPhases.push(phase);
+            }
+            return { ...prev, phases: newPhases.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) };
+        });
+        setSelection({ type: 'GAME_SETTINGS' }); // Reset selection after save for simplicity or find new index
     };
 
-    const handleDeleteAbility = () => {
-        setAbilityUpdateKey(prev => prev + 1); // trigger sidebar re-fetch
+    const handleDeletePhase = (id?: number, index?: number) => {
+        setGameData(prev => {
+            const newPhases = prev.phases.filter((p, i) => {
+                if (id !== undefined && id !== null && p.id === id) return false;
+                if (index !== undefined && i === index) return false;
+                return true;
+            });
+            return { ...prev, phases: newPhases };
+        });
         setSelection({ type: 'GAME_SETTINGS' });
     };
+
+    const handleWinConditionSaved = (wc: WinCondition, index?: number) => {
+        setGameData(prev => {
+            const newWcs = [...prev.win_conditions];
+            if (index !== undefined && index >= 0) {
+                newWcs[index] = wc;
+            } else {
+                newWcs.push(wc);
+            }
+            return { ...prev, win_conditions: newWcs };
+        });
+        setSelection({ type: 'GAME_SETTINGS' });
+    };
+
+    const handleDeleteWinCondition = (id?: number, index?: number) => {
+        setGameData(prev => {
+            const newWcs = prev.win_conditions.filter((w, i) => {
+                if (id !== undefined && id !== null && w.id === id) return false;
+                if (index !== undefined && i === index) return false;
+                return true;
+            });
+            return { ...prev, win_conditions: newWcs };
+        });
+        setSelection({ type: 'GAME_SETTINGS' });
+    };
+
+    const handleReorderPhases = async (newPhases: Phase[]) => {
+        setGameData(prev => ({ ...prev, phases: newPhases }));
+        const orders = newPhases.map(p => ({ id: p.id, order: p.order })).filter(o => o.id !== undefined);
+        if (orders.length === 0) return;
+
+        try {
+            await API.post('/phases/reorder/', { orders });
+        } catch (e) {
+            console.error("Failed to persist phase order", e);
+        }
+    };
+
 
     const handleSnackbarClose = () => {
         setSnackbar(prev => ({ ...prev, open: false }));
@@ -191,23 +257,56 @@ const GameEditor = () => {
                 role_slots: gameData.role_slots.map(slot => ({
                     role: slot.roleId,
                     count: slot.count
+                })),
+                phases: gameData.phases.map(p => ({
+                    name: p.name,
+                    phase_type: p.phase_type,
+                    order: p.order
+                })),
+                win_conditions: gameData.win_conditions.map(wc => ({
+                    name: wc.name,
+                    winner_alignment: wc.winner_alignment,
+                    criteria: wc.criteria,
+                    order: wc.order
                 }))
             };
 
+            let res;
             if (id) {
-                await API.put(`/game-templates/${id}/`, payload);
+                res = await API.put(`/game-templates/${id}/`, payload);
                 setSnackbar({ open: true, message: "Game Updated Successfully!", severity: 'success' });
             } else {
-                await API.post("/game-templates/", payload);
-                setSnackbar({ open: true, message: "Game Created Successfully!", severity: 'success' });
+                res = await API.post("/game-templates/", payload);
+                setSnackbar({ open: true, message: "Game Created Successfully! Default phases and win conditions added.", severity: 'success' });
+                // Update navigation and state with the new ID
+                navigate(`/edit-game/${res.data.id}`, { replace: true });
             }
-            // Navigate after a short delay so the user can see the snackbar
-            setTimeout(() => {
-                navigate("/");
-            }, 1000);
-        } catch (e) {
+
+            // Sync state with backend response (includes generated IDs and defaults)
+            const data = res.data;
+            setGameData({
+                id: data.id,
+                name: data.name,
+                min_players: data.min_players,
+                max_players: data.max_players,
+                role_slots: data.role_slots.map((s: any) => ({
+                    roleId: s.role,
+                    roleName: s.role_details?.name || 'Unknown',
+                    count: s.count
+                })),
+                phases: data.phases || [],
+                win_conditions: data.win_conditions || []
+            });
+
+        } catch (e: any) {
             console.error(e);
-            setSnackbar({ open: true, message: "Failed to save game.", severity: 'error' });
+            let errMsg = "Failed to save game.";
+            if (e.response?.data) {
+                if (typeof e.response.data === 'string') errMsg = e.response.data;
+                else if (e.response.data.detail) errMsg = e.response.data.detail;
+                else errMsg = JSON.stringify(e.response.data);
+            }
+            setSnackbar({ open: true, message: errMsg, severity: 'error' });
         }
     };
 
@@ -242,12 +341,12 @@ const GameEditor = () => {
                 overflow: 'hidden'
             }}>
                 <Sidebar
-                    key={abilityUpdateKey}
                     gameData={gameData}
-                    onSelect={(type, roleId) => setSelection((type === 'ROLE' || type === 'EDIT_ABILITY_DETAILS') && 
-                        roleId ? { type, roleId: roleId } : { type: type as any })}
+                    onSelect={(type, id, index) => setSelection({ type, id, index } as any)}
                     onAddRole={() => setSelection({ type: 'NEW_ROLE' })}
-                    onAddAbility={() => setSelection({ type: 'NEW_ABILITY' })}
+                    onAddPhase={() => setSelection({ type: 'NEW_PHASE' })}
+                    onAddWinCondition={() => setSelection({ type: 'NEW_WIN_CONDITION' })}
+                    onReorderPhases={handleReorderPhases}
                 />
 
                 <Box component="main" sx={{
@@ -318,10 +417,12 @@ const GameEditor = () => {
                     validationState={validationState}
                     onUpdateGame={handleUpdateGame}
                     onSaveRole={handleRoleSaved}
-                    onSaveAbility={handleAbilitySaved}
-                    onDeleteAbility={handleDeleteAbility}
+                    onSavePhase={handlePhaseSaved}
+                    onDeletePhase={handleDeletePhase}
+                    onSaveWinCondition={handleWinConditionSaved}
+                    onDeleteWinCondition={handleDeleteWinCondition}
                     onCancel={() => setSelection({ type: 'GAME_SETTINGS' })}
-                    onEditRoleDetails={(roleId) => setSelection({ type: 'EDIT_ROLE_DETAILS', roleId })}
+                    onEditRoleDetails={(id) => setSelection({ type: 'EDIT_ROLE_DETAILS', id })}
                 />
             </Box>
 

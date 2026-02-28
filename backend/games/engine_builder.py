@@ -33,7 +33,21 @@ def build_role(role_template: RoleTemplate) -> Role:
     return Role(role_template.name, alignment, abilities)
 
 def build_game_engine(game_template: GameTemplate, player_names: list) -> GameEngine:
-    engine = GameEngine()
+    phases = [
+        {"name": p.name, "type": p.phase_type}
+        for p in game_template.phases.all().order_by('order')
+    ]
+    
+    win_conditions = [
+        {
+            "name": wc.name,
+            "winner_alignment": wc.winner_alignment,
+            "criteria": wc.criteria
+        }
+        for wc in game_template.win_conditions.all()
+    ]
+    
+    engine = GameEngine(phases=phases, win_conditions=win_conditions)
     
     # Collect all roles defined in the template
     available_roles = []
