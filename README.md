@@ -33,7 +33,7 @@ This platform allows users to:
 
 
 ## Getting Started
-
+A live build of the project can be found here: [Live Build](https://social-deduction-game-engine.onrender.com/) or  
 See [doc/setup.md](doc/setup.md) for setup instructions.
 
 ## Documentation
