@@ -67,7 +67,7 @@ class GameTemplateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GameTemplate
-        fields = ["id", "name", "min_players", "max_players", "role_slots", "creator_name", "creator_id"]
+        fields = ["id", "name", "min_players", "max_players", "is_public", "role_slots", "creator_name", "creator_id"]
 
     def get_creator_name(self, obj):
         return obj.creator.username if obj.creator else None
@@ -86,6 +86,7 @@ class GameTemplateSerializer(serializers.ModelSerializer):
         instance.name = validated_data.get("name", instance.name)
         instance.min_players = validated_data.get("min_players", instance.min_players)
         instance.max_players = validated_data.get("max_players", instance.max_players)
+        instance.is_public = validated_data.get("is_public", instance.is_public)
         instance.save()
 
         if role_slots_data is not None:

@@ -50,9 +50,17 @@ class RoleTemplateViewSet(viewsets.ModelViewSet):
     queryset = RoleTemplate.objects.all()
     serializer_class = RoleTemplateSerializer
 
+from django.db.models import Q
+
 class GameTemplateViewSet(viewsets.ModelViewSet):
     queryset = GameTemplate.objects.all()
     serializer_class = GameTemplateSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated:
+            return GameTemplate.objects.filter(Q(is_public=True) | Q(creator=user)).distinct()
+        return GameTemplate.objects.filter(is_public=True)
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -121,6 +129,9 @@ def start_game_session(request):
 
     try:
         template = GameTemplate.objects.get(id=template_id)
+        if not template.is_public:
+            if not request.user.is_authenticated or template.creator != request.user:
+                return Response({"error": "Template not found or private"}, status=404)
     except GameTemplate.DoesNotExist:
         return Response({"error": "Template not found"}, status=404)
 

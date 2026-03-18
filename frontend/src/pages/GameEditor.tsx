@@ -15,7 +15,7 @@ import { API } from '../services/api';
 import type { GameData, RoleSlot } from '../types';
 import { useNavigate, useParams } from 'react-router-dom';
 
-type Selection = { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | 
+type Selection = { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } |
 { type: 'EDIT_ROLE_DETAILS', roleId: number } | { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
 
 type GameValidationState = {
@@ -95,10 +95,11 @@ const GameEditor = () => {
         name: "New Game",
         min_players: 4,
         max_players: 10,
+        is_public: true,
         role_slots: []
     });
     // This state variable key forces the Sidebar to remount/re-fetch abilities when an ability is saved
-    const [abilityUpdateKey, setAbilityUpdateKey] = useState(0); 
+    const [abilityUpdateKey, setAbilityUpdateKey] = useState(0);
     const [selection, setSelection] = useState<Selection>({ type: 'GAME_SETTINGS' });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -122,6 +123,7 @@ const GameEditor = () => {
                         name: data.name,
                         min_players: data.min_players,
                         max_players: data.max_players,
+                        is_public: data.is_public !== undefined ? data.is_public : true,
                         role_slots: role_slots
                     });
                 })
@@ -188,6 +190,7 @@ const GameEditor = () => {
                 name: gameData.name,
                 min_players: gameData.min_players,
                 max_players: gameData.max_players,
+                is_public: gameData.is_public,
                 role_slots: gameData.role_slots.map(slot => ({
                     role: slot.roleId,
                     count: slot.count
@@ -244,7 +247,7 @@ const GameEditor = () => {
                 <Sidebar
                     key={abilityUpdateKey}
                     gameData={gameData}
-                    onSelect={(type, roleId) => setSelection((type === 'ROLE' || type === 'EDIT_ABILITY_DETAILS') && 
+                    onSelect={(type, roleId) => setSelection((type === 'ROLE' || type === 'EDIT_ABILITY_DETAILS') &&
                         roleId ? { type, roleId: roleId } : { type: type as any })}
                     onAddRole={() => setSelection({ type: 'NEW_ROLE' })}
                     onAddAbility={() => setSelection({ type: 'NEW_ABILITY' })}

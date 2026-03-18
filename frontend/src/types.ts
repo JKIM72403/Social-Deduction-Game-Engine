@@ -8,6 +8,7 @@ export type GameData = {
     name: string;
     min_players: number;
     max_players: number;
+    is_public: boolean;
     role_slots: RoleSlot[];
 };
 

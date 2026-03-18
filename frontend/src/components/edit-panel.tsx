@@ -2,6 +2,8 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
+import Switch from '@mui/material/Switch';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import RoleEditor from './RoleEditor';
 import AbilityEditor from './AbilityEditor';
 import type { GameData } from '../types';
@@ -15,7 +17,7 @@ interface GameValidationState {
 }
 
 interface EditPanelProps {
-    selection: { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | { type: 'EDIT_ROLE_DETAILS', roleId: number } | 
+    selection: { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | { type: 'EDIT_ROLE_DETAILS', roleId: number } |
     { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
     gameData: GameData;
     validationState: GameValidationState;
@@ -95,6 +97,18 @@ const EditPanel = ({ selection, gameData, validationState, onUpdateGame, onSaveR
                     onChange={(e) => onUpdateGame({ name: e.target.value })}
                     sx={{ mb: 2 }}
                 />
+
+                <Box sx={{ mb: 2, transform: 'translateZ(0)', willChange: 'transform' }}>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={gameData.is_public !== false}
+                                onChange={(e) => onUpdateGame({ is_public: e.target.checked })}
+                            />
+                        }
+                        label="Public Game (visible to all)"
+                    />
+                </Box>
 
                 <Box sx={{ display: 'flex', gap: 2 }}>
                     <TextField

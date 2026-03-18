@@ -44,6 +44,7 @@ class GameTemplate(models.Model):
     name = models.CharField(max_length=100)
     min_players = models.IntegerField()
     max_players = models.IntegerField()
+    is_public = models.BooleanField(default=True)
 
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
