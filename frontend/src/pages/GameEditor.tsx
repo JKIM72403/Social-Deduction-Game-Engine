@@ -16,8 +16,7 @@ import type { GameData, Phase, WinCondition, RoleSlot } from '../types';
 import type { Selection } from '../components/edit-panel';
 import { useNavigate, useParams } from 'react-router-dom';
 
-type Selection = { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } |
-{ type: 'EDIT_ROLE_DETAILS', roleId: number } | { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
+
 
 type GameValidationState = {
     errors: string[];
@@ -97,10 +96,28 @@ const GameEditor = () => {
         min_players: 4,
         max_players: 10,
         is_public: true,
-        role_slots: []
+        role_slots: [],
+        phases: [
+            { name: "Night (default)", phase_type: "NIGHT", order: 0 },
+            { name: "Day (default)", phase_type: "DAY", order: 1 },
+            { name: "Voting (default)", phase_type: "VOTING", order: 2 }
+        ],
+        win_conditions: [
+            {
+                name: "Town Victory (default)",
+                winner_alignment: "TOWN",
+                order: 0,
+                criteria: [{ type: "ALIGNMENT_COUNT", target: "MAFIA", count: 0 }]
+            },
+            {
+                name: "Mafia Victory (default)",
+                winner_alignment: "MAFIA",
+                order: 1,
+                criteria: [{ type: "ALIGNMENT_COUNT", target: "TOWN", count: 0 }]
+            }
+        ]
     });
-    // This state variable key forces the Sidebar to remount/re-fetch abilities when an ability is saved
-    const [abilityUpdateKey, setAbilityUpdateKey] = useState(0);
+
     const [selection, setSelection] = useState<Selection>({ type: 'GAME_SETTINGS' });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -126,7 +143,9 @@ const GameEditor = () => {
                         min_players: data.min_players,
                         max_players: data.max_players,
                         is_public: data.is_public !== undefined ? data.is_public : true,
-                        role_slots: role_slots
+                        role_slots: role_slots,
+                        phases: data.phases || [],
+                        win_conditions: data.win_conditions || []
                     });
                 })
                 .catch(err => {
@@ -279,6 +298,7 @@ const GameEditor = () => {
                     roleName: s.role_details?.name || 'Unknown',
                     count: s.count
                 })),
+                is_public: data.is_public !== undefined ? data.is_public : true,
                 phases: data.phases || [],
                 win_conditions: data.win_conditions || []
             });
@@ -327,8 +347,15 @@ const GameEditor = () => {
             }}>
                 <Sidebar
                     gameData={gameData}
-                    onSelect={(type, roleId) => setSelection((type === 'ROLE' || type === 'EDIT_ABILITY_DETAILS') &&
-                        roleId ? { type, roleId: roleId } : { type: type as any })}
+                    onSelect={(type, id, index) => {
+                        if (type === 'PHASE' || type === 'WIN_CONDITION') {
+                            setSelection({ type, id, index: index! });
+                        } else if (type === 'ROLE' && id !== undefined) {
+                            setSelection({ type, id });
+                        } else {
+                            setSelection({ type: 'GAME_SETTINGS' });
+                        }
+                    }}
                     onAddRole={() => setSelection({ type: 'NEW_ROLE' })}
                     onAddPhase={() => setSelection({ type: 'NEW_PHASE' })}
                     onAddWinCondition={() => setSelection({ type: 'NEW_WIN_CONDITION' })}

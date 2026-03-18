@@ -51,6 +51,14 @@ class RoleTemplateViewSet(viewsets.ModelViewSet):
     queryset = RoleTemplate.objects.all()
     serializer_class = RoleTemplateSerializer
 
+class PhaseTemplateViewSet(viewsets.ModelViewSet):
+    queryset = PhaseTemplate.objects.all()
+    serializer_class = PhaseTemplateSerializer
+
+class WinConditionTemplateViewSet(viewsets.ModelViewSet):
+    queryset = WinConditionTemplate.objects.all()
+    serializer_class = WinConditionTemplateSerializer
+
 from django.db.models import Q
 
 class GameTemplateViewSet(viewsets.ModelViewSet):
