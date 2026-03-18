@@ -5,8 +5,9 @@ import Button from '@mui/material/Button';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import RoleEditor from './RoleEditor';
-import AbilityEditor from './AbilityEditor';
-import type { GameData } from '../types';
+import PhaseEditor from './PhaseEditor';
+import WinConditionEditor from './WinConditionEditor';
+import type { GameData, Phase, WinCondition } from '../types';
 
 interface GameValidationState {
     errors: string[];
@@ -16,6 +17,17 @@ interface GameValidationState {
     roleSlotErrors: Record<number, string>;
 }
 
+export type Selection =
+    | { type: 'GAME_SETTINGS' }
+    | { type: 'ROLE', id: number }
+    | { type: 'NEW_ROLE' }
+    | { type: 'EDIT_ROLE_DETAILS', id: number }
+    | { type: 'PHASE', id?: number, index: number }
+    | { type: 'NEW_PHASE' }
+    | { type: 'WIN_CONDITION', id?: number, index: number }
+    | { type: 'NEW_WIN_CONDITION' }
+    | null;
+
 interface EditPanelProps {
     selection: { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | { type: 'EDIT_ROLE_DETAILS', roleId: number } |
     { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
@@ -23,13 +35,27 @@ interface EditPanelProps {
     validationState: GameValidationState;
     onUpdateGame: (data: Partial<GameData>) => void;
     onSaveRole: (role: any) => void;
-    onSaveAbility?: (ability: any) => void;
-    onDeleteAbility?: (abilityId: number) => void;
+    onSavePhase: (phase: Phase, index?: number) => void;
+    onDeletePhase: (id?: number, index?: number) => void;
+    onSaveWinCondition: (wc: WinCondition, index?: number) => void;
+    onDeleteWinCondition: (id?: number, index?: number) => void;
     onCancel: () => void;
     onEditRoleDetails: (roleId: number) => void;
 }
 
-const EditPanel = ({ selection, gameData, validationState, onUpdateGame, onSaveRole, onSaveAbility, onDeleteAbility, onCancel, onEditRoleDetails }: EditPanelProps) => {
+const EditPanel = ({
+    selection,
+    gameData,
+    validationState,
+    onUpdateGame,
+    onSaveRole,
+    onSavePhase,
+    onDeletePhase,
+    onSaveWinCondition,
+    onDeleteWinCondition,
+    onCancel,
+    onEditRoleDetails
+}: EditPanelProps) => {
     if (!selection) {
         return (
             <Box sx={{ width: 350, p: 3, textAlign: 'center', color: 'text.secondary' }}>
@@ -38,25 +64,60 @@ const EditPanel = ({ selection, gameData, validationState, onUpdateGame, onSaveR
         );
     }
 
-    if (selection.type === 'NEW_ABILITY') {
+    if (selection.type === 'NEW_PHASE') {
         return (
             <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
-                <AbilityEditor onSave={onSaveAbility!} onCancel={onCancel} />
+                <PhaseEditor
+                    gameId={gameData.id!}
+                    onSave={onSavePhase}
+                    onCancel={onCancel}
+                />
             </Box>
         );
     }
 
-    if (selection.type === 'EDIT_ABILITY_DETAILS') {
+    if (selection.type === 'PHASE') {
+        const phase = gameData.phases[selection.index];
+        if (!phase) return null;
         return (
             <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
-                <AbilityEditor
-                    abilityId={selection.roleId} // 'roleId' holds the generic selection ID here
-                    onSave={(updatedAbility) => {
-                        onSaveAbility!(updatedAbility);
-                    }}
-                    onDelete={() => {
-                        if (onDeleteAbility) onDeleteAbility(selection.roleId);
-                    }}
+                <PhaseEditor
+                    gameId={gameData.id}
+                    phaseId={selection.id}
+                    initialData={phase}
+                    onSave={(p) => onSavePhase(p, selection.index)}
+                    onDelete={() => onDeletePhase(selection.id, selection.index)}
+                    onCancel={onCancel}
+                />
+            </Box>
+        );
+    }
+
+    if (selection.type === 'NEW_WIN_CONDITION') {
+        return (
+            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+                <WinConditionEditor
+                    gameId={gameData.id!}
+                    roleSlots={gameData.role_slots}
+                    onSave={onSaveWinCondition}
+                    onCancel={onCancel}
+                />
+            </Box>
+        );
+    }
+
+    if (selection.type === 'WIN_CONDITION') {
+        const wc = gameData.win_conditions[selection.index];
+        if (!wc) return null;
+        return (
+            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+                <WinConditionEditor
+                    gameId={gameData.id}
+                    winConditionId={selection.id}
+                    initialData={wc}
+                    roleSlots={gameData.role_slots}
+                    onSave={(w) => onSaveWinCondition(w, selection.index)}
+                    onDelete={() => onDeleteWinCondition(selection.id, selection.index)}
                     onCancel={onCancel}
                 />
             </Box>
@@ -75,7 +136,7 @@ const EditPanel = ({ selection, gameData, validationState, onUpdateGame, onSaveR
         return (
             <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
                 <RoleEditor
-                    roleId={selection.roleId}
+                    roleId={selection.id}
                     onSave={(updatedRole) => {
                         onSaveRole(updatedRole);
                     }}
@@ -133,7 +194,7 @@ const EditPanel = ({ selection, gameData, validationState, onUpdateGame, onSaveR
     }
 
     if (selection.type === 'ROLE') {
-        const slot = gameData.role_slots.find(s => s.roleId === selection.roleId);
+        const slot = gameData.role_slots.find(s => s.roleId === selection.id);
         if (!slot) return null;
 
         return (
@@ -167,7 +228,7 @@ const EditPanel = ({ selection, gameData, validationState, onUpdateGame, onSaveR
                 <Button
                     variant="outlined"
                     fullWidth
-                    onClick={() => onEditRoleDetails(selection.roleId)}
+                    onClick={() => onEditRoleDetails(selection.id)}
                 >
                     Edit Role Details
                 </Button>

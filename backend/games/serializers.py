@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import RoleTemplate, AbilityTemplate, RoleAbility, GameTemplate, GameRoleSlot
+from .models import RoleTemplate, AbilityTemplate, RoleAbility, GameTemplate, GameRoleSlot, PhaseTemplate, WinConditionTemplate
 
 
 class AbilityTemplateSerializer(serializers.ModelSerializer):
@@ -30,7 +30,7 @@ class RoleTemplateSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "alignment", "description", "abilities", "ability_details"]
 
     def create(self, validated_data):
-        abilities = validated_data.pop("abilities")
+        abilities = validated_data.pop("abilities", [])
         role = RoleTemplate.objects.create(**validated_data)
         for ability in abilities:
             RoleAbility.objects.create(role=role, ability=ability)
@@ -60,8 +60,24 @@ class GameRoleSlotSerializer(serializers.ModelSerializer):
         fields = ["role", "count", "role_details"]
 
 
+class PhaseTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PhaseTemplate
+        fields = ["id", "name", "game_template", "phase_type", "order"]
+        read_only_fields = ["game_template"]
+
+
+class WinConditionTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WinConditionTemplate
+        fields = ["id", "name", "game_template", "winner_alignment", "criteria", "order"]
+        read_only_fields = ["game_template"]
+
+
 class GameTemplateSerializer(serializers.ModelSerializer):
     role_slots = GameRoleSlotSerializer(many=True)
+    phases = PhaseTemplateSerializer(many=True, required=False)
+    win_conditions = WinConditionTemplateSerializer(many=True, required=False)
     creator_name = serializers.SerializerMethodField()
     creator_id = serializers.IntegerField(source='creator.id', read_only=True, default=None)
 
@@ -73,11 +89,21 @@ class GameTemplateSerializer(serializers.ModelSerializer):
         return obj.creator.username if obj.creator else None
 
     def create(self, validated_data):
-        role_slots_data = validated_data.pop("role_slots")
+        role_slots_data = validated_data.pop("role_slots", [])
+        phases_data = validated_data.pop("phases", [])
+        win_conditions_data = validated_data.pop("win_conditions", [])
+        
+        # Ensure we don't pass extra fields to create
         game_template = GameTemplate.objects.create(**validated_data)
 
         for slot in role_slots_data:
             GameRoleSlot.objects.create(game_template=game_template, **slot)
+
+        for phase in phases_data:
+            PhaseTemplate.objects.create(game_template=game_template, **phase)
+            
+        for win_condition in win_conditions_data:
+            WinConditionTemplate.objects.create(game_template=game_template, **win_condition)
 
         return game_template
 
@@ -90,10 +116,19 @@ class GameTemplateSerializer(serializers.ModelSerializer):
         instance.save()
 
         if role_slots_data is not None:
-            # Clear existing slots and add new ones
             GameRoleSlot.objects.filter(game_template=instance).delete()
             for slot in role_slots_data:
                 GameRoleSlot.objects.create(game_template=instance, **slot)
+
+        if phases_data is not None:
+            PhaseTemplate.objects.filter(game_template=instance).delete()
+            for phase in phases_data:
+                PhaseTemplate.objects.create(game_template=instance, **phase)
+                
+        if win_conditions_data is not None:
+            WinConditionTemplate.objects.filter(game_template=instance).delete()
+            for win_condition in win_conditions_data:
+                WinConditionTemplate.objects.create(game_template=instance, **win_condition)
 
         return instance
 

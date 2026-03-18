@@ -180,8 +180,15 @@ class NightPhase(Phase):
 # --- Main Engine ---
 
 class GameEngine:
-    def __init__(self):
+    def __init__(self, phases: List[dict] = None, win_conditions: List[dict] = None):
         self.players: List[Player] = []
+        self.phase_configs = phases or [
+            {"name": "Night", "type": "NIGHT"},
+            {"name": "Day", "type": "DAY"},
+            {"name": "Voting", "type": "VOTING"},
+        ]
+        self.win_condition_configs = win_conditions or []
+        self.phase_index = -1
         self.phase_state: PhaseState = PhaseState.WAITING
         self.current_phase: Phase = None
         self.events: List[str] = []
@@ -205,9 +212,20 @@ class GameEngine:
 
     def start_game(self):
         self.turn_number = 1
-        self.transition_to(PhaseState.NIGHT)
+        self.phase_index = -1
+        self.advance_phase()
 
-    def transition_to(self, new_state: PhaseState):
+    def advance_phase(self):
+        self.phase_index = (self.phase_index + 1) % len(self.phase_configs)
+        config = self.phase_configs[self.phase_index]
+        new_state = PhaseState[config['type']]
+        
+        if new_state == PhaseState.NIGHT:
+            self.turn_number += 1
+            
+        self.transition_to(new_state, config['name'])
+
+    def transition_to(self, new_state: PhaseState, phase_name: str = None):
         if self.current_phase:
             self.current_phase.end()
             self.check_win_conditions()
@@ -215,13 +233,13 @@ class GameEngine:
                 return
 
         self.phase_state = new_state
+        self.log(f"Entering {phase_name or new_state.value}")
         
         if new_state == PhaseState.DAY:
             self.current_phase = DayPhase(self)
         elif new_state == PhaseState.VOTING:
             self.current_phase = VotingPhase(self)
         elif new_state == PhaseState.NIGHT:
-            self.turn_number += 1
             self.current_phase = NightPhase(self)
         elif new_state == PhaseState.GAME_OVER:
             self.current_phase = None
@@ -236,13 +254,40 @@ class GameEngine:
 
     def check_win_conditions(self):
         alive = self.get_alive_players()
-        mafia_count = sum(1 for p in alive if p.role.alignment == Alignment.MAFIA)
-        town_count = sum(1 for p in alive if p.role.alignment == Alignment.TOWN)
         
-        if mafia_count == 0:
-            self.log("Town wins!")
-            self.phase_state = PhaseState.GAME_OVER
-        elif mafia_count >= town_count:
-            self.log("Mafia wins!")
-            self.phase_state = PhaseState.GAME_OVER
+        # If no win conditions defined, use default fallback
+        if not self.win_condition_configs:
+            mafia_count = sum(1 for p in alive if p.role.alignment == Alignment.MAFIA)
+            town_count = sum(1 for p in alive if p.role.alignment == Alignment.TOWN)
+            if mafia_count == 0:
+                self.log("Town wins!")
+                self.phase_state = PhaseState.GAME_OVER
+            elif mafia_count >= town_count:
+                self.log("Mafia wins!")
+                self.phase_state = PhaseState.GAME_OVER
+            return
+
+        for wc in self.win_condition_configs:
+            met = True
+            for criterion in wc.get('criteria', []):
+                ctype = criterion.get('type')
+                target = criterion.get('target')
+                count = criterion.get('count', 0)
+                
+                if ctype == 'ROLE_COUNT':
+                    actual_count = sum(1 for p in alive if p.role.name == target) # Using name for simplicity in engine
+                    if actual_count != count:
+                        met = False; break
+                elif ctype == 'ALIGNMENT_COUNT':
+                    actual_count = sum(1 for p in alive if p.role.alignment.value == target)
+                    if actual_count != count:
+                        met = False; break
+                elif ctype == 'SURVIVAL':
+                    if self.turn_number < count:
+                        met = False; break
+            
+            if met:
+                self.log(f"WIN CONDITION MET: {wc.get('name')}! {wc.get('winner_alignment')} Victory!")
+                self.phase_state = PhaseState.GAME_OVER
+                return
 

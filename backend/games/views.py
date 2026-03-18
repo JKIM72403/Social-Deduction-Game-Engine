@@ -3,13 +3,14 @@ from django.contrib.auth import authenticate
 import uuid
 import random
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
-from .models import RoleTemplate, AbilityTemplate, GameTemplate
+from .models import RoleTemplate, AbilityTemplate, GameTemplate, PhaseTemplate, WinConditionTemplate
 from .serializers import (
     RoleTemplateSerializer, AbilityTemplateSerializer, GameTemplateSerializer,
+    PhaseTemplateSerializer, WinConditionTemplateSerializer,
     UserSerializer, SignupSerializer, LoginSerializer,
 )
 from .engine_builder import build_game_engine
