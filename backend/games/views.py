@@ -51,31 +51,17 @@ class RoleTemplateViewSet(viewsets.ModelViewSet):
     queryset = RoleTemplate.objects.all()
     serializer_class = RoleTemplateSerializer
 
-class PhaseTemplateViewSet(viewsets.ModelViewSet):
-    queryset = PhaseTemplate.objects.all()
-    serializer_class = PhaseTemplateSerializer
-
-    @action(detail=False, methods=['post'])
-    def reorder(self, request):
-        orders = request.data.get('orders', []) # [{"id": 1, "order": 0}, ...]
-        for item in orders:
-            PhaseTemplate.objects.filter(id=item['id']).update(order=item['order'])
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-class WinConditionTemplateViewSet(viewsets.ModelViewSet):
-    queryset = WinConditionTemplate.objects.all()
-    serializer_class = WinConditionTemplateSerializer
-
-    @action(detail=False, methods=['post'])
-    def reorder(self, request):
-        orders = request.data.get('orders', []) # [{"id": 1, "order": 0}, ...]
-        for item in orders:
-            WinConditionTemplate.objects.filter(id=item['id']).update(order=item['order'])
-        return Response(status=status.HTTP_204_NO_CONTENT)
+from django.db.models import Q
 
 class GameTemplateViewSet(viewsets.ModelViewSet):
     queryset = GameTemplate.objects.all()
     serializer_class = GameTemplateSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated:
+            return GameTemplate.objects.filter(Q(is_public=True) | Q(creator=user)).distinct()
+        return GameTemplate.objects.filter(is_public=True)
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -144,6 +130,9 @@ def start_game_session(request):
 
     try:
         template = GameTemplate.objects.get(id=template_id)
+        if not template.is_public:
+            if not request.user.is_authenticated or template.creator != request.user:
+                return Response({"error": "Template not found or private"}, status=404)
     except GameTemplate.DoesNotExist:
         return Response({"error": "Template not found"}, status=404)
 
