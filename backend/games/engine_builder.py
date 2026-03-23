@@ -1,6 +1,7 @@
 from .models import RoleTemplate, AbilityTemplate, GameTemplate
 from .engine import (
     Role, Ability, KillAbility, ProtectAbility, InvestigateAbility, 
+    TrapAbility, VoteStealAbility, DoubleVoteAbility, BlockAbility,
     Alignment, GameEngine, Player
 )
 
@@ -11,13 +12,21 @@ def build_ability(ability_template: AbilityTemplate):
     
     # Simple mapping based on type
     if atype == "KILL":
-        return KillAbility(name, priority=5)
+        return KillAbility(name, priority=5, phase=ability_template.phase)
     elif atype == "PROTECT":
-        return ProtectAbility(name, priority=1)
+        return ProtectAbility(name, priority=1, phase=ability_template.phase)
     elif atype == "INVESTIGATE":
-        return InvestigateAbility(name, priority=10)
+        return InvestigateAbility(name, priority=10, phase=ability_template.phase)
+    elif atype == "TRAP":
+        return TrapAbility(name, priority=0, phase=ability_template.phase)
+    elif atype == "BLOCK":
+        return BlockAbility(name, priority=0, phase=ability_template.phase)
+    elif atype == "VOTE_STEAL":
+        return VoteStealAbility(name, priority=10, phase=ability_template.phase)
+    elif atype == "DOUBLE_VOTE":
+        return DoubleVoteAbility(name, priority=10, phase=ability_template.phase)
     else:
-        return Ability(name, priority=50)
+        return Ability(name, priority=50, phase=ability_template.phase)
 
 def build_role(role_template: RoleTemplate) -> Role:
     abilities = []

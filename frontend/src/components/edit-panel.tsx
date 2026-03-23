@@ -29,8 +29,7 @@ export type Selection =
     | null;
 
 interface EditPanelProps {
-    selection: { type: 'GAME_SETTINGS' } | { type: 'ROLE', roleId: number } | { type: 'NEW_ROLE' } | { type: 'EDIT_ROLE_DETAILS', roleId: number } |
-    { type: 'NEW_ABILITY' } | { type: 'EDIT_ABILITY_DETAILS', roleId: number } | null;
+    selection: Selection;
     gameData: GameData;
     validationState: GameValidationState;
     onUpdateGame: (data: Partial<GameData>) => void;
@@ -40,7 +39,7 @@ interface EditPanelProps {
     onSaveWinCondition: (wc: WinCondition, index?: number) => void;
     onDeleteWinCondition: (id?: number, index?: number) => void;
     onCancel: () => void;
-    onEditRoleDetails: (roleId: number) => void;
+    onEditRoleDetails: (id: number) => void;
 }
 
 const EditPanel = ({
