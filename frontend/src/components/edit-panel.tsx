@@ -41,7 +41,7 @@ interface EditPanelProps {
     onSaveWinCondition: (wc: WinCondition, index?: number) => void;
     onDeleteWinCondition: (id?: number, index?: number) => void;
     onCancel: () => void;
-    onEditRoleDetails: (roleId: number) => void;
+    onEditRoleDetails: (id: number) => void;
 }
 
 const EditPanel = ({

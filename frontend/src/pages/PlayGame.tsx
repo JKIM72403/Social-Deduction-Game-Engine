@@ -16,6 +16,7 @@ type Player = {
 type Ability = {
     index: number;
     name: string;
+    phase: string;
 };
 
 type GameState = {
@@ -51,7 +52,8 @@ function getPhaseGuidance(gameState: GameState) {
     }
 
     if (gameState.phase === "NIGHT") {
-        return gameState.me.abilities.length > 0
+        const nightAbilities = gameState.me.abilities.filter(ab => ab.phase === "NIGHT");
+        return nightAbilities.length > 0
             ? {
                 title: "Night phase",
                 message: "Choose one of your abilities and select a living target, then submit your action.",
@@ -97,8 +99,15 @@ export default function PlayGame() {
     const [actionError, setActionError] = useState<string | null>(null);
 
     // Form states
-    const [selectedAbility, setSelectedAbility] = useState<number>(0);
-    const [selectedTarget, setSelectedTarget] = useState<string>("");
+    const [selectedAbility, setSelectedAbility] = useState<number>(-1);
+    const [selectedAbilityTarget, setSelectedAbilityTarget] = useState<string>("");
+    const [selectedVoteTarget, setSelectedVoteTarget] = useState<string>("");
+    
+    // Voting phase flow
+    const [votingSubPhase, setVotingSubPhase] = useState<'ABILITY' | 'VOTE'>('ABILITY');
+    const [hasUsedAbilityThisPhase, setHasUsedAbilityThisPhase] = useState(false);
+
+    const currentAbilities = gameState?.me.abilities.filter(ab => ab.phase === gameState.phase) || [];
 
     useEffect(() => {
         // Start the game session
@@ -113,6 +122,21 @@ export default function PlayGame() {
                 setLoading(false);
             });
     }, [templateId]);
+
+    useEffect(() => {
+        if (currentAbilities.length > 0 && !hasUsedAbilityThisPhase) {
+            setSelectedAbility(currentAbilities[0].index);
+            setVotingSubPhase('ABILITY');
+        } else {
+            setSelectedAbility(-1);
+            setVotingSubPhase('VOTE');
+        }
+        
+        // Reset ability usage flag on phase change
+        if (gameState?.phase !== "VOTING") {
+            setHasUsedAbilityThisPhase(false);
+        }
+    }, [gameState?.phase, currentAbilities.length, hasUsedAbilityThisPhase]);
 
     const handleAction = async (actionData: any) => {
         if (!gameState || isSubmitting) return;
@@ -136,13 +160,14 @@ export default function PlayGame() {
 
     const submitNightAction = (e: React.FormEvent) => {
         e.preventDefault();
-        if (gameState?.me.abilities.length === 0) {
+        const currentAbilities = gameState?.me.abilities.filter(ab => ab.phase === gameState.phase) || [];
+        if (currentAbilities.length === 0) {
             void handleAction(null); // Just skip
             return;
         }
         void handleAction({
             ability_index: selectedAbility,
-            target: selectedTarget
+            target: selectedAbilityTarget
         });
     };
 
@@ -150,7 +175,7 @@ export default function PlayGame() {
         e.preventDefault();
         void handleAction({
             action: "vote",
-            target: selectedTarget
+            target: selectedVoteTarget
         });
     };
 
@@ -287,7 +312,7 @@ export default function PlayGame() {
                                             : "You have no night actions this turn. Submit to continue."}
                                     </Typography>
                                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-                                        {gameState.me.abilities.length > 0 ? (
+                                        {currentAbilities.length > 0 ? (
                                             <>
                                                 <FormControl size="small" sx={{ minWidth: 150 }}>
                                                     <Select
@@ -295,7 +320,7 @@ export default function PlayGame() {
                                                         onChange={e => setSelectedAbility(Number(e.target.value))}
                                                         disabled={isSubmitting}
                                                     >
-                                                        {gameState.me.abilities.map(ab => (
+                                                        {currentAbilities.map(ab => (
                                                             <MenuItem key={ab.index} value={ab.index}>{ab.name}</MenuItem>
                                                         ))}
                                                     </Select>
@@ -303,8 +328,8 @@ export default function PlayGame() {
                                                 
                                                 <FormControl size="small" sx={{ minWidth: 150 }}>
                                                     <Select
-                                                        value={selectedTarget}
-                                                        onChange={e => setSelectedTarget(e.target.value)}
+                                                        value={selectedAbilityTarget}
+                                                        onChange={e => setSelectedAbilityTarget(e.target.value)}
                                                         displayEmpty
                                                         required
                                                         disabled={isSubmitting}
@@ -332,30 +357,87 @@ export default function PlayGame() {
                             )}
 
                             {gameState.phase === "VOTING" && (
-                                <form onSubmit={submitVoteAction}>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                                        Cast one vote against a living player. Bots will vote after your action.
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <FormControl size="small" sx={{ minWidth: 150 }}>
-                                            <Select
-                                                value={selectedTarget}
-                                                onChange={e => setSelectedTarget(e.target.value)}
-                                                displayEmpty
-                                                required
-                                                disabled={isSubmitting}
-                                            >
-                                                <MenuItem value="" disabled>Select Target</MenuItem>
-                                                {gameState.players.filter(p => p.is_alive).map(p => (
-                                                    <MenuItem key={p.name} value={p.name}>{p.name}</MenuItem>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-                                        <Button type="submit" variant="contained" color="error" disabled={isSubmitting}>
-                                            {isSubmitting ? "Submitting..." : "Vote to Eliminate"}
-                                        </Button>
-                                    </Box>
-                                </form>
+                                <Box>
+                                    {votingSubPhase === 'ABILITY' && currentAbilities.length > 0 ? (
+                                        <Box sx={{ mb: 3, p: 3, border: '1px dashed grey', borderRadius: 2, bgcolor: 'rgba(25, 118, 210, 0.04)' }}>
+                                            <Typography variant="h6" gutterBottom color="primary">Phase 1: Vote Manipulation</Typography>
+                                            <Typography variant="body2" sx={{ mb: 3 }} color="text.secondary">
+                                                Select an ability to use before final voting begins. You can only use one ability per voting round.
+                                            </Typography>
+                                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                <FormControl size="small" sx={{ minWidth: 150 }}>
+                                                    <Select
+                                                        value={selectedAbility}
+                                                        onChange={e => setSelectedAbility(Number(e.target.value))}
+                                                        disabled={isSubmitting}
+                                                    >
+                                                        {currentAbilities.map(ab => (
+                                                            <MenuItem key={ab.index} value={ab.index}>{ab.name}</MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                                <FormControl size="small" sx={{ minWidth: 150 }}>
+                                                    <Select
+                                                        value={selectedAbilityTarget}
+                                                        onChange={e => setSelectedAbilityTarget(e.target.value)}
+                                                        displayEmpty
+                                                        disabled={isSubmitting}
+                                                    >
+                                                        <MenuItem value="" disabled>Select Target</MenuItem>
+                                                        {gameState.players.filter(p => p.is_alive).map(p => (
+                                                            <MenuItem key={p.name} value={p.name}>{p.name}</MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                                <Button 
+                                                    onClick={async () => {
+                                                        await handleAction({ ability_index: selectedAbility, target: selectedAbilityTarget });
+                                                        setHasUsedAbilityThisPhase(true);
+                                                        setVotingSubPhase('VOTE');
+                                                    }} 
+                                                    variant="contained" 
+                                                    color="primary" 
+                                                    disabled={isSubmitting || !selectedAbilityTarget}
+                                                >
+                                                    Use Ability
+                                                </Button>
+                                                <Button 
+                                                    onClick={() => setVotingSubPhase('VOTE')} 
+                                                    variant="text" 
+                                                    disabled={isSubmitting}
+                                                >
+                                                    Skip to Vote
+                                                </Button>
+                                            </Box>
+                                        </Box>
+                                    ) : (
+                                        <form onSubmit={submitVoteAction}>
+                                            <Typography variant="h6" gutterBottom color="error">Phase 2: Final Vote</Typography>
+                                            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                                                Manipulation phase is over. Cast your final vote for elimination.
+                                            </Typography>
+                                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                <FormControl size="small" sx={{ minWidth: 150 }}>
+                                                    <Select
+                                                        value={selectedVoteTarget}
+                                                        onChange={e => setSelectedVoteTarget(e.target.value)}
+                                                        displayEmpty
+                                                        required
+                                                        disabled={isSubmitting}
+                                                    >
+                                                        <MenuItem value="" disabled>Select Target</MenuItem>
+                                                        {gameState.players.filter(p => p.is_alive).map(p => (
+                                                            <MenuItem key={p.name} value={p.name}>{p.name}</MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                                <Button type="submit" variant="contained" color="error" disabled={isSubmitting}>
+                                                    {isSubmitting ? "Submit Vote" : "Confirm Vote"}
+                                                </Button>
+                                            </Box>
+                                        </form>
+                                    )}
+                                </Box>
                             )}
 
                             {gameState.phase === "DAY" && (

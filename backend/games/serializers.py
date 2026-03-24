@@ -93,17 +93,45 @@ class GameTemplateSerializer(serializers.ModelSerializer):
         phases_data = validated_data.pop("phases", [])
         win_conditions_data = validated_data.pop("win_conditions", [])
         
-        # Ensure we don't pass extra fields to create
         game_template = GameTemplate.objects.create(**validated_data)
 
         for slot in role_slots_data:
             GameRoleSlot.objects.create(game_template=game_template, **slot)
 
-        for phase in phases_data:
-            PhaseTemplate.objects.create(game_template=game_template, **phase)
-            
-        for win_condition in win_conditions_data:
-            WinConditionTemplate.objects.create(game_template=game_template, **win_condition)
+        # If no phases provided, create default Night -> Day -> Voting cycle
+        if not phases_data:
+            default_phases = [
+                {"name": "Night", "phase_type": "NIGHT", "order": 0},
+                {"name": "Day", "phase_type": "DAY", "order": 1},
+                {"name": "Voting", "phase_type": "VOTING", "order": 2},
+            ]
+            for phase in default_phases:
+                PhaseTemplate.objects.create(game_template=game_template, **phase)
+        else:
+            for phase in phases_data:
+                PhaseTemplate.objects.create(game_template=game_template, **phase)
+
+        # If no win conditions provided, create default Town and Mafia win conditions
+        if not win_conditions_data:
+            default_win_conditions = [
+                {
+                    "name": "Town Victory",
+                    "winner_alignment": "TOWN",
+                    "criteria": [{"type": "ALIGNMENT_COUNT", "target": "MAFIA", "count": 0}],
+                    "order": 0,
+                },
+                {
+                    "name": "Mafia Victory",
+                    "winner_alignment": "MAFIA",
+                    "criteria": [{"type": "ALIGNMENT_COUNT", "target": "TOWN", "count": 0}],
+                    "order": 1,
+                },
+            ]
+            for wc in default_win_conditions:
+                WinConditionTemplate.objects.create(game_template=game_template, **wc)
+        else:
+            for win_condition in win_conditions_data:
+                WinConditionTemplate.objects.create(game_template=game_template, **win_condition)
 
         return game_template
 
@@ -111,7 +139,6 @@ class GameTemplateSerializer(serializers.ModelSerializer):
         role_slots_data = validated_data.pop("role_slots", None)
         phases_data = validated_data.pop("phases", None)
         win_conditions_data = validated_data.pop("win_conditions", None)
-        
         instance.name = validated_data.get("name", instance.name)
         instance.min_players = validated_data.get("min_players", instance.min_players)
         instance.max_players = validated_data.get("max_players", instance.max_players)
@@ -127,7 +154,7 @@ class GameTemplateSerializer(serializers.ModelSerializer):
             PhaseTemplate.objects.filter(game_template=instance).delete()
             for phase in phases_data:
                 PhaseTemplate.objects.create(game_template=instance, **phase)
-                
+
         if win_conditions_data is not None:
             WinConditionTemplate.objects.filter(game_template=instance).delete()
             for win_condition in win_conditions_data:

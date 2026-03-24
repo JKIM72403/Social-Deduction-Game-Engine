@@ -128,7 +128,7 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
                                     }}
                                 />
                             }
-                            label={`${a.name} (${a.ability_type})`}
+                            label={a.name}
                         />
                     ))}
                 </FormGroup>

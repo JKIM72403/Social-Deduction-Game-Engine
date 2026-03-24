@@ -29,6 +29,30 @@ def seed_abilities():
             "ability_type": "INVESTIGATE",
             "phase": "NIGHT",
             "description": "Discover the alignment of another player."
+        },
+        {
+            "name": "Block",
+            "ability_type": "BLOCK",
+            "phase": "NIGHT",
+            "description": "Prevent another player from using their ability."
+        },
+        {
+            "name": "Trap",
+            "ability_type": "TRAP",
+            "phase": "NIGHT",
+            "description": "Place a trap. Anyone visiting it will be scared off."
+        },
+        {
+            "name": "Vote Steal",
+            "ability_type": "VOTE_STEAL",
+            "phase": "VOTING",
+            "description": "Steal another player's vote for today."
+        },
+        {
+            "name": "Double Vote",
+            "ability_type": "DOUBLE_VOTE",
+            "phase": "VOTING",
+            "description": "Give a player an extra vote today."
         }
     ]
 

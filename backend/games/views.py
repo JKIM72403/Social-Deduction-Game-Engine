@@ -114,7 +114,7 @@ def serialize_game_state(session_id, engine, user_name):
     abilities = []
     if user_player and user_player.is_alive and user_player.role.abilities:
         for i, ab in enumerate(user_player.role.abilities):
-            abilities.append({"index": i, "name": ab.name})
+            abilities.append({"index": i, "name": ab.name, "phase": ab.phase})
 
     return {
         "session_id": session_id,
@@ -175,43 +175,78 @@ def game_session_action(request, session_id):
     engine = ACTIVE_GAMES[session_id]
     user_name = request.data.get('user_name', 'You')
     action_data = request.data.get('action', {})
+    current_phase = engine.phase_state
 
     # Check if the game is already over
-    if engine.phase_state == PhaseState.GAME_OVER:
+    if current_phase == PhaseState.GAME_OVER:
         return Response(serialize_game_state(session_id, engine, user_name))
 
     # Process user action if alive
     user_player = engine.get_player(user_name)
-    if user_player and user_player.is_alive and action_data:
-        engine.handle_input(user_player.name, action_data)
+    user_performed_vote = False
+    
+    if user_player and user_player.is_alive:
+        if action_data: # It's an ability or vote
+            if current_phase == PhaseState.VOTING and action_data.get('action') == 'vote':
+                user_performed_vote = True
+            engine.handle_input(user_player.name, action_data)
+        elif action_data is None: # Explicit skip/null
+            if current_phase == PhaseState.VOTING:
+                user_performed_vote = True
 
     # Process bot actions based on current phase
     alive_players = engine.get_alive_players()
-    current_phase = engine.phase_state
 
-    for bot in alive_players:
-        if bot.name == user_name:
-            continue
+    # Advance to the next phase as defined in the game template
+    # IMPORTANT: Only advance if the "terminal" action for the phase was taken.
+    # For NIGHT and DAY, any action (or skip) advances.
+    # For VOTING, only a 'vote' action (or skip) advances.
+    should_advance = True
+    if current_phase == PhaseState.VOTING:
+        # If user just used an ability but didn't vote yet, don't advance and don't let bots act
+        if action_data and action_data.get('ability_index') is not None and not user_performed_vote:
+            should_advance = False
 
-        if current_phase == PhaseState.NIGHT:
-            if bot.role.abilities:
+    if should_advance:
+        for bot in alive_players:
+            if bot.name == user_name:
+                continue
+
+            if current_phase == PhaseState.NIGHT:
+                # Bots with night abilities pick a random target
+                night_abilities = [
+                    (i, ab) for i, ab in enumerate(bot.role.abilities)
+                    if ab.phase == 'NIGHT'
+                ]
+                if night_abilities:
+                    idx, _ = night_abilities[0]
+                    target = random.choice(alive_players)
+                    engine.handle_input(bot.name, {
+                        "ability_index": idx,
+                        "target": target.name
+                    })
+            elif current_phase == PhaseState.DAY:
+                pass
+            elif current_phase == PhaseState.VOTING:
+                # Bots use voting abilities then vote
+                voting_abilities = [
+                    (i, ab) for i, ab in enumerate(bot.role.abilities)
+                    if ab.phase == 'VOTING'
+                ]
+                if voting_abilities:
+                    idx, _ = voting_abilities[0]
+                    target = random.choice(alive_players)
+                    engine.handle_input(bot.name, {
+                        "ability_index": idx,
+                        "target": target.name
+                    })
+                
                 target = random.choice(alive_players)
                 engine.handle_input(bot.name, {
-                    "ability_index": 0,
+                    "action": "vote",
                     "target": target.name
                 })
-        elif current_phase == PhaseState.VOTING:
-            target = random.choice(alive_players)
-            engine.handle_input(bot.name, {
-                "action": "vote",
-                "target": target.name
-            })
 
-    # Transition phase
-    if current_phase == PhaseState.NIGHT:
-        engine.transition_to(PhaseState.DAY)
-        engine.transition_to(PhaseState.VOTING)
-    elif current_phase == PhaseState.VOTING:
-        engine.transition_to(PhaseState.NIGHT)
+        engine.advance_phase()
 
     return Response(serialize_game_state(session_id, engine, user_name))

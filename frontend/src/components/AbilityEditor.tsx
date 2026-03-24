@@ -103,6 +103,10 @@ export default function AbilityEditor({ abilityId, onSave, onCancel, onDelete }:
                     <MenuItem value="KILL">Kill Target</MenuItem>
                     <MenuItem value="PROTECT">Protect Target</MenuItem>
                     <MenuItem value="INVESTIGATE">Investigate Alignment</MenuItem>
+                    <MenuItem value="BLOCK">Block Target</MenuItem>
+                    <MenuItem value="TRAP">Trap Target</MenuItem>
+                    <MenuItem value="VOTE_STEAL">Steal Vote</MenuItem>
+                    <MenuItem value="DOUBLE_VOTE">Double Vote</MenuItem>
                 </Select>
             </FormControl>
 

@@ -6,6 +6,10 @@ class AbilityTemplate(models.Model):
         ("KILL", "Kill Target"),
         ("PROTECT", "Protect Target"),
         ("INVESTIGATE", "Investigate Alignment"),
+        ("BLOCK", "Block Target"),
+        ("TRAP", "Trap Target"),
+        ("VOTE_STEAL", "Steal Vote"),
+        ("DOUBLE_VOTE", "Double Vote"),
     ]
 
     name = models.CharField(max_length=100)

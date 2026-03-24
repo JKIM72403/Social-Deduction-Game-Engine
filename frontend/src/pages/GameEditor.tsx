@@ -16,8 +16,6 @@ import type { GameData, Phase, WinCondition, RoleSlot } from '../types';
 import type { Selection } from '../components/edit-panel';
 import { useNavigate, useParams } from 'react-router-dom';
 
-
-
 type GameValidationState = {
     errors: string[];
     totalRoleSlots: number;
@@ -145,7 +143,7 @@ const GameEditor = () => {
                         is_public: data.is_public !== undefined ? data.is_public : true,
                         role_slots: role_slots,
                         phases: data.phases || [],
-                        win_conditions: data.win_conditions || []
+                        win_conditions: data.win_conditions || [],
                     });
                 })
                 .catch(err => {
@@ -176,7 +174,7 @@ const GameEditor = () => {
                 return { ...prev, role_slots: [...prev.role_slots, newSlot] };
             }
         });
-        setSelection({ type: 'ROLE', id: role.id });
+        setSelection({ type: 'ROLE', id: role.id as number });
     };
 
     const handlePhaseSaved = (phase: Phase, index?: number) => {
@@ -293,6 +291,7 @@ const GameEditor = () => {
                 name: data.name,
                 min_players: data.min_players,
                 max_players: data.max_players,
+                is_public: data.is_public !== undefined ? data.is_public : true,
                 role_slots: data.role_slots.map((s: any) => ({
                     roleId: s.role,
                     roleName: s.role_details?.name || 'Unknown',
@@ -348,10 +347,12 @@ const GameEditor = () => {
                 <Sidebar
                     gameData={gameData}
                     onSelect={(type, id, index) => {
-                        if (type === 'PHASE' || type === 'WIN_CONDITION') {
-                            setSelection({ type, id, index: index! });
-                        } else if (type === 'ROLE' && id !== undefined) {
-                            setSelection({ type, id });
+                        if (type === 'ROLE' && id !== undefined) {
+                            setSelection({ type: 'ROLE', id });
+                        } else if (type === 'PHASE' && index !== undefined) {
+                            setSelection({ type: 'PHASE', id, index });
+                        } else if (type === 'WIN_CONDITION' && index !== undefined) {
+                            setSelection({ type: 'WIN_CONDITION', id, index });
                         } else {
                             setSelection({ type: 'GAME_SETTINGS' });
                         }
@@ -435,7 +436,7 @@ const GameEditor = () => {
                     onSaveWinCondition={handleWinConditionSaved}
                     onDeleteWinCondition={handleDeleteWinCondition}
                     onCancel={() => setSelection({ type: 'GAME_SETTINGS' })}
-                    onEditRoleDetails={(id) => setSelection({ type: 'EDIT_ROLE_DETAILS', id })}
+                    onEditRoleDetails={(id: number) => setSelection({ type: 'EDIT_ROLE_DETAILS', id })}
                 />
             </Box>
 
