@@ -297,7 +297,6 @@ const GameEditor = () => {
                     roleName: s.role_details?.name || 'Unknown',
                     count: s.count
                 })),
-                is_public: data.is_public !== undefined ? data.is_public : true,
                 phases: data.phases || [],
                 win_conditions: data.win_conditions || []
             });
