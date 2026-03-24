@@ -10,6 +10,10 @@ class Command(BaseCommand):
             ("Kill", "KILL", "NIGHT", "Eliminate a player during the night."),
             ("Protect", "PROTECT", "NIGHT", "Protect a player from elimination."),
             ("Investigate", "INVESTIGATE", "NIGHT", "Discover a player's alignment."),
+            ("Block", "BLOCK", "NIGHT", "Block a player from acting during the night."),
+            ("Trap", "TRAP", "NIGHT", "Place a trap that identifies or stops visitors."),
+            ("Vote Steal", "VOTE_STEAL", "VOTING", "Steal a target's vote during the voting phase."),
+            ("Double Vote", "DOUBLE_VOTE", "VOTING", "Gain an extra vote for yourself or a target during voting."),
         ]
         
         ability_objs = {}
@@ -20,6 +24,11 @@ class Command(BaseCommand):
                 phase=phase,
                 defaults={"description": desc}
             )
+            # Update values if it already exists but they are different
+            if not created:
+                obj.ability_type = atype
+                obj.phase = phase
+                obj.save()
             ability_objs[name] = obj
             if created:
                 self.stdout.write(self.style.SUCCESS(f'Created ability: {name}'))
