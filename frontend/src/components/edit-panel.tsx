@@ -22,6 +22,8 @@ export type Selection =
     | { type: 'ROLE', id: number }
     | { type: 'NEW_ROLE' }
     | { type: 'EDIT_ROLE_DETAILS', id: number }
+    | { type: 'NEW_ABILITY' }
+    | { type: 'EDIT_ABILITY_DETAILS', id: number }
     | { type: 'PHASE', id?: number, index: number }
     | { type: 'NEW_PHASE' }
     | { type: 'WIN_CONDITION', id?: number, index: number }

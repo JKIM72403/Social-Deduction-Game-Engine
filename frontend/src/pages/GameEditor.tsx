@@ -96,25 +96,26 @@ const GameEditor = () => {
         is_public: true,
         role_slots: [],
         phases: [
-            { name: "Night",  phase_type: "NIGHT",  order: 0 },
-            { name: "Day",    phase_type: "DAY",    order: 1 },
-            { name: "Voting", phase_type: "VOTING", order: 2 },
+            { name: "Night (default)", phase_type: "NIGHT", order: 0 },
+            { name: "Day (default)", phase_type: "DAY", order: 1 },
+            { name: "Voting (default)", phase_type: "VOTING", order: 2 }
         ],
         win_conditions: [
             {
-                name: "Town Victory",
+                name: "Town Victory (default)",
                 winner_alignment: "TOWN",
-                criteria: [{ type: "ALIGNMENT_COUNT", target: "MAFIA", count: 0 }],
                 order: 0,
+                criteria: [{ type: "ALIGNMENT_COUNT", target: "MAFIA", count: 0 }]
             },
             {
-                name: "Mafia Victory",
+                name: "Mafia Victory (default)",
                 winner_alignment: "MAFIA",
-                criteria: [{ type: "ALIGNMENT_COUNT", target: "TOWN", count: 0 }],
                 order: 1,
-            },
-        ],
+                criteria: [{ type: "ALIGNMENT_COUNT", target: "TOWN", count: 0 }]
+            }
+        ]
     });
+
     const [selection, setSelection] = useState<Selection>({ type: 'GAME_SETTINGS' });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -296,6 +297,7 @@ const GameEditor = () => {
                     roleName: s.role_details?.name || 'Unknown',
                     count: s.count
                 })),
+                is_public: data.is_public !== undefined ? data.is_public : true,
                 phases: data.phases || [],
                 win_conditions: data.win_conditions || []
             });
