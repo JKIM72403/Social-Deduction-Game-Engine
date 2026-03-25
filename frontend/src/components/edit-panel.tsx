@@ -45,6 +45,7 @@ interface EditPanelProps {
     onCancel: () => void;
     onEditRoleDetails: (id: number) => void;
     onSwitchToCustomRoleEditor: () => void;
+    onDeleteRole: (id: number) => void;
 }
 
 const EditPanel = ({
@@ -59,7 +60,8 @@ const EditPanel = ({
     onDeleteWinCondition,
     onCancel,
     onEditRoleDetails,
-    onSwitchToCustomRoleEditor
+    onSwitchToCustomRoleEditor,
+    onDeleteRole
 }: EditPanelProps) => {
     if (!selection) {
         return (
@@ -249,6 +251,16 @@ const EditPanel = ({
                     onClick={() => onEditRoleDetails(selection.id)}
                 >
                     Edit Role Details
+                </Button>
+
+                <Button
+                    variant="text"
+                    color="error"
+                    fullWidth
+                    sx={{ mt: 2 }}
+                    onClick={() => onDeleteRole(selection.id)}
+                >
+                    Remove Role from Game
                 </Button>
             </Box>
         );

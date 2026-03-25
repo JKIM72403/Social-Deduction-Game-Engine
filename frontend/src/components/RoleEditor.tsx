@@ -219,7 +219,7 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
                 )}
             </Popover>
 
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 4 }}>
                 <Button onClick={onCancel} variant="outlined" color="secondary">
                     Cancel
                 </Button>

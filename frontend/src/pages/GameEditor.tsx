@@ -177,6 +177,14 @@ const GameEditor = () => {
         setSelection({ type: 'ROLE', id: role.id as number });
     };
 
+    const handleDeleteRole = (id: number) => {
+        setGameData(prev => ({
+            ...prev,
+            role_slots: prev.role_slots.filter(s => s.roleId !== id)
+        }));
+        setSelection({ type: 'GAME_SETTINGS' });
+    };
+
     const handlePhaseSaved = (phase: Phase, index?: number) => {
         setGameData(prev => {
             const newPhases = [...prev.phases];
@@ -437,6 +445,7 @@ const GameEditor = () => {
                     onCancel={() => setSelection({ type: 'GAME_SETTINGS' })}
                     onEditRoleDetails={(id: number) => setSelection({ type: 'EDIT_ROLE_DETAILS', id })}
                     onSwitchToCustomRoleEditor={() => setSelection({ type: 'CREATE_CUSTOM_ROLE' })}
+                    onDeleteRole={handleDeleteRole}
                 />
             </Box>
 
