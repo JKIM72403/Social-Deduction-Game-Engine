@@ -14,6 +14,12 @@ class Command(BaseCommand):
             ("Trap", "TRAP", "NIGHT", "Place a trap that identifies or stops visitors."),
             ("Vote Steal", "VOTE_STEAL", "VOTING", "Steal a target's vote during the voting phase."),
             ("Double Vote", "DOUBLE_VOTE", "VOTING", "Gain an extra vote for yourself or a target during voting."),
+            ("Roleblock", "ROLEBLOCK", "NIGHT", "Prevent a player from using their night ability."),
+            ("Watch", "LOOKOUT", "NIGHT", "Watch a player and see who visits them."),
+            ("Jail", "JAIL", "NIGHT", "Jail a player, protecting and blocking them simultaneously."),
+            ("Douse", "DOUSE", "NIGHT", "Douse a player in gasoline for later ignition."),
+            ("Ignite", "IGNITE", "NIGHT", "Ignite all doused players, killing them."),
+            ("Mafia Kill", "IMMUNE_KILL", "NIGHT", "Kill as the Godfather with investigation immunity."),
         ]
         
         ability_objs = {}
@@ -39,12 +45,30 @@ class Command(BaseCommand):
             ("Doctor", "TOWN", "Can protect one player each night."),
             ("Sheriff", "TOWN", "Can investigate one player each night."),
             ("Mafioso", "MAFIA", "A member of the mafia who can kill each night."),
+            ("Jailor", "TOWN", "A powerful town role who can jail one player each night, protecting and roleblocking them."),
+            ("Lookout", "TOWN", "Watches a player at night and sees all visitors."),
+            ("Bodyguard", "TOWN", "Can protect someone else or guard themselves once per game."),
+            ("Vigilante", "TOWN", "A town member with a gun. Can shoot someone at night (limited use - judge wisely)."),
+            ("Godfather", "MAFIA", "The mafia leader. Kills at night and appears as TOWN when investigated."),
+            ("Consort", "MAFIA", "A distracting mafia member who roleblocks town power roles."),
+            ("Jester", "NEUTRAL", "Wins by getting lynched. Has no abilities - just act suspicious!"),
+            ("Executioner", "NEUTRAL", "Wins if a specific town member is lynched. Has no abilities."),
+            ("Serial Killer", "NEUTRAL", "A lone killer. Kills anyone each night. Wins by being the last one alive."),
+            ("Arsonist", "NEUTRAL", "Douses players in gasoline at night, then ignites all at once. Wins as sole survivor."),
         ]
 
         role_ability_map = {
             "Doctor": ["Protect"],
             "Sheriff": ["Investigate"],
             "Mafioso": ["Kill"],
+            "Jailor": ["Jail"],
+            "Lookout": ["Watch"],
+            "Bodyguard": ["Protect"],
+            "Vigilante": ["Kill"],
+            "Godfather": ["Mafia Kill"],
+            "Consort": ["Roleblock"],
+            "Serial Killer": ["Kill"],
+            "Arsonist": ["Douse", "Ignite"],
         }
 
         for name, align, desc in roles:

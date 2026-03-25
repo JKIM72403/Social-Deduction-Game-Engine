@@ -45,8 +45,13 @@ class ProtectAbility(Ability):
 
 class InvestigateAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
-        # In a real game, this info would be sent privately to the source
-        game.log(f"You investigated {target.name}: {target.role.alignment.value}", "investigate", [source.name])
+        # Check if target has investigation-immune ability
+        is_immune = any(getattr(ab, 'investigation_immune', False) for ab in target.role.abilities)
+        if is_immune:
+            # Godfather shows as TOWN
+            game.log(f"You investigated {target.name}: TOWN", "investigate", [source.name])
+        else:
+            game.log(f"You investigated {target.name}: {target.role.alignment.value}", "investigate", [source.name])
 
 class BlockAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
@@ -67,6 +72,86 @@ class DoubleVoteAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         target.status_effects["double_vote"] = True
         game.log(f"You gave a double vote effect to {target.name}!", "ability", [source.name])
+
+class RoleblockAbility(Ability):
+    def __init__(self, name: str, priority: int = 0, phase: str = "NIGHT"):
+        super().__init__(name, priority, phase)
+    
+    def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
+        target.status_effects["roleblocked"] = True
+        game.log(f"You roleblocked {target.name}!", "ability", [source.name])
+
+class LookoutAbility(Ability):
+    def __init__(self, name: str, priority: int = 10, phase: str = "NIGHT"):
+        super().__init__(name, priority, phase)
+    
+    def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
+        visitors = target.status_effects.get("visited_by", [])
+        if visitors:
+            visitor_names = ", ".join([v.name for v in visitors])
+            game.log(f"You watched {target.name}. Visitors: {visitor_names}", "ability", [source.name])
+        else:
+            game.log(f"You watched {target.name}. No visitors.", "ability", [source.name])
+
+class JailAbility(Ability):
+    def __init__(self, name: str, priority: int = 0, phase: str = "NIGHT"):
+        super().__init__(name, priority, phase)
+    
+    def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
+        target.status_effects["jailed"] = True
+        target.status_effects["roleblocked"] = True
+        target.status_effects["protected"] = True
+        game.log(f"You jailed {target.name}!", "ability", [source.name])
+        game.log("You were jailed! You cannot act or be targeted.", "system", [target.name])
+
+class DouseAbility(Ability):
+    def __init__(self, name: str, priority: int = 5, phase: str = "NIGHT"):
+        super().__init__(name, priority, phase)
+    
+    def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
+        if not hasattr(game, 'doused_players'):
+            game.doused_players = set()
+        game.doused_players.add(target.name)
+        game.log(f"You doused {target.name} in gasoline.", "ability", [source.name])
+
+class IgniteAbility(Ability):
+    def __init__(self, name: str, priority: int = 5, phase: str = "NIGHT"):
+        super().__init__(name, priority, phase)
+        self.target_self = True
+    
+    def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
+        if not hasattr(game, 'doused_players'):
+            game.doused_players = set()
+        
+        if not game.doused_players:
+            game.log("No one was doused. The ignition fizzles.", "ability", [source.name])
+            return
+        
+        killed = []
+        for player_name in list(game.doused_players):
+            player = game.get_player(player_name)
+            if player and player.is_alive and not player.status_effects.get("protected"):
+                player.is_alive = False
+                killed.append(player_name)
+        
+        game.doused_players.clear()
+        if killed:
+            killed_str = ", ".join(killed)
+            game.log(f"The arsonist ignited their targets! {killed_str} burned!", "kill", "all")
+        else:
+            game.log("The ignition failed - all targets were protected!", "ability", [source.name])
+
+class ImmuneKillAbility(Ability):
+    def __init__(self, name: str, priority: int = 5, phase: str = "NIGHT"):
+        super().__init__(name, priority, phase)
+        self.investigation_immune = True
+    
+    def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
+        if target.status_effects.get("protected") or target.status_effects.get("jailed"):
+            game.log(f"{target.name} was attacked but survived!", "protect", "all")
+        else:
+            target.is_alive = False
+            game.log(f"{target.name} was killed!", "kill", "all")
 
 class Role:
     def __init__(self, name: str, alignment: Alignment, abilities: List[Ability] = None):
@@ -205,6 +290,7 @@ class VotingPhase(Phase):
             if target_player:
                 self.game.log(f"{target_player.name} was voted out!", "kill")
                 target_player.is_alive = False
+                self.game.last_lynched = target_player.name
         else:
             self.game.log("No one received enough votes.", "vote")
 
@@ -248,20 +334,45 @@ class NightPhase(Phase):
         # Sort by priority
         self.pending_actions.sort(key=lambda a: a.ability.priority)
 
+        # Initialize visit tracking for this night
+        for p in self.game.players:
+            p.status_effects["visited_by"] = []
+
         for action in self.pending_actions:
-            if action.source.is_alive: # Ensure killer didn't die mid-resolution
-                if action.ability.priority > 0 and action.source.status_effects.get("blocked"):
-                    self.game.log("You were blocked and could not perform your action.", "ability", [action.source.name])
+            if not action.source.is_alive:
+                continue
+            
+            # Track visits BEFORE checking blocks (for lookout to see blocked visitors)
+            if action.target != action.source:  # Don't track self-visits
+                if "visited_by" not in action.target.status_effects:
+                    action.target.status_effects["visited_by"] = []
+                action.target.status_effects["visited_by"].append(action.source)
+            
+            # Jailed targets cannot be visited (except by jailor)
+            if action.target.status_effects.get("jailed") and action.source != action.target:
+                jailed_by_source = False
+                # Check if source is the jailor who jailed this target
+                for other_action in self.pending_actions:
+                    if other_action.source == action.source and isinstance(other_action.ability, JailAbility) and other_action.target == action.target:
+                        jailed_by_source = True
+                        break
+                if not jailed_by_source:
                     continue
+            
+            # Check if source is roleblocked
+            if action.ability.priority > 0 and action.source.status_effects.get("roleblocked"):
+                self.game.log("You were blocked and could not perform your action.", "ability", [action.source.name])
+                continue
 
-                if action.ability.priority > 0 and "trapped_by" in action.target.status_effects:
-                    trapper = action.target.status_effects["trapped_by"]
-                    self.game.log(f"Your trap caught {action.source.name} visiting {action.target.name}!", "ability", [trapper.name])
-                    continue
+            # Check traps
+            if action.ability.priority > 0 and "trapped_by" in action.target.status_effects:
+                trapper = action.target.status_effects["trapped_by"]
+                self.game.log(f"Your trap caught {action.source.name} visiting {action.target.name}!", "ability", [trapper.name])
+                # Continue execution - trap doesn't stop the action, just reveals it
 
-                action.ability.execute(action.source, action.target, self.game)
+            action.ability.execute(action.source, action.target, self.game)
 
-        # Reset nightly statuses
+        # Reset nightly statuses (except doused, which persists on engine)
         for p in self.game.players:
             p.status_effects = {}
 
@@ -304,6 +415,8 @@ class GameEngine:
         self.events: List[dict] = []
         self.turn_number = 1
         self._started = False
+        self.doused_players = set()
+        self.last_lynched = None
 
     def add_player(self, player: Player):
         self.players.append(player)
@@ -375,6 +488,33 @@ class GameEngine:
 
     def check_win_conditions(self):
         alive = self.get_alive_players()
+        
+        # CHECK NEUTRAL WINS FIRST (higher priority than faction wins)
+        
+        # Jester win: was lynched (eliminated during voting phase)
+        if hasattr(self, 'last_lynched') and self.last_lynched:
+            lynched_player = self.get_player(self.last_lynched)
+            if lynched_player and lynched_player.role.name == "Jester":
+                self.log(f"JESTER WINS! {self.last_lynched} was lynched and achieves their goal!", "win")
+                self.phase_state = PhaseState.GAME_OVER
+                return
+            self.last_lynched = None  # Reset after checking
+        
+        # Serial Killer win: last one standing
+        sk_alive = [p for p in alive if p.role.name == "Serial Killer"]
+        if sk_alive and len(alive) == 1:
+            self.log("SERIAL KILLER WINS! Only chaos remains.", "win")
+            self.phase_state = PhaseState.GAME_OVER
+            return
+        
+        # Arsonist win: last one standing
+        arso_alive = [p for p in alive if p.role.name == "Arsonist"]
+        if arso_alive and len(alive) == 1:
+            self.log("ARSONIST WINS! The town burns to ashes.", "win")
+            self.phase_state = PhaseState.GAME_OVER
+            return
+        
+        # THEN CHECK ALIGNMENT-BASED WINS
 
         # If no win conditions defined, use default fallback
         if not self.win_condition_configs:

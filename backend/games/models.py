@@ -13,6 +13,12 @@ class AbilityTemplate(models.Model):
         ("TRAP", "Trap Target"),
         ("VOTE_STEAL", "Steal Vote"),
         ("DOUBLE_VOTE", "Double Vote"),
+        ("ROLEBLOCK", "Roleblock Target"),
+        ("LOOKOUT", "Watch Target"),
+        ("JAIL", "Jail Target"),
+        ("DOUSE", "Douse Target"),
+        ("IGNITE", "Ignite All"),
+        ("IMMUNE_KILL", "Kill with Immunity"),
     ]
 
     name = models.CharField(max_length=100)

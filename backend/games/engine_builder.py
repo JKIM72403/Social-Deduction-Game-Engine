@@ -2,6 +2,7 @@ from .models import RoleTemplate, AbilityTemplate, GameTemplate
 from .engine import (
     Role, Ability, KillAbility, ProtectAbility, InvestigateAbility, 
     TrapAbility, VoteStealAbility, DoubleVoteAbility, BlockAbility,
+    RoleblockAbility, LookoutAbility, JailAbility, DouseAbility, IgniteAbility, ImmuneKillAbility,
     Alignment, GameEngine, Player
 )
 
@@ -25,6 +26,18 @@ def build_ability(ability_template: AbilityTemplate):
         return VoteStealAbility(name, priority=10, phase=ability_template.phase)
     elif atype == "DOUBLE_VOTE":
         return DoubleVoteAbility(name, priority=10, phase=ability_template.phase)
+    elif atype == "ROLEBLOCK":
+        return RoleblockAbility(name, priority=0, phase=ability_template.phase)
+    elif atype == "LOOKOUT":
+        return LookoutAbility(name, priority=10, phase=ability_template.phase)
+    elif atype == "JAIL":
+        return JailAbility(name, priority=0, phase=ability_template.phase)
+    elif atype == "DOUSE":
+        return DouseAbility(name, priority=5, phase=ability_template.phase)
+    elif atype == "IGNITE":
+        return IgniteAbility(name, priority=5, phase=ability_template.phase)
+    elif atype == "IMMUNE_KILL":
+        return ImmuneKillAbility(name, priority=5, phase=ability_template.phase)
     else:
         return Ability(name, priority=50, phase=ability_template.phase)
 
