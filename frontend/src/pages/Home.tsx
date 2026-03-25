@@ -92,7 +92,7 @@ export default function Home() {
                         Game Templates
                     </Typography>
                     <Typography variant="body1" color="text.secondary" gutterBottom>
-                        Run a solo demo with `Play`, or host a multiplayer lobby and share the generated join code with your group.
+                        Create and play solo or multiplayer social deduction games!
                     </Typography>
                 </Box>
                 {user && (

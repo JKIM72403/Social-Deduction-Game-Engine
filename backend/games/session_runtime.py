@@ -61,7 +61,7 @@ def move_to_open_voting_round(state: dict, participants) -> dict:
             append_event(state, f"Entering {phase_name}. Cast your votes.")
             return _open_voting_round(state, participants)
 
-        append_event(state, f"Skipping {phase_name} in the multiplayer voting demo.")
+        append_event(state, f"Skipping {phase_name}")
 
     raise ValueError("Unable to find the next voting phase for this session.")
 
