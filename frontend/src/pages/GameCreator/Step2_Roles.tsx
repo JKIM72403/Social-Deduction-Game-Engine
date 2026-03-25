@@ -1,7 +1,31 @@
 import { useEffect, useState } from "react";
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import { API } from "../../services/api";
 import type { GameData } from "../types";
 import RoleEditor from "../../components/RoleEditor";
+
+const selectedChipSx = {
+    borderColor: '#22c55e',
+    borderWidth: 2,
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+    '&:hover': {
+        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    },
+};
+
+const unselectedChipSx = {
+    borderColor: '#334155',
+    borderWidth: 1,
+    '&:hover': {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    },
+};
 
 interface Props {
     data: GameData;
@@ -72,55 +96,132 @@ export default function Step2_Roles({ data, update, onNext, onBack }: Props) {
 
     return (
         <div className="wizard-step">
-            <h2>Manage Roles</h2>
-            <div className="role-management">
-                <div className="available-roles">
-                    <h3>Available Roles</h3>
-                    <button onClick={() => setIsCreatingRole(true)} className="btn-secondary small">+ Create New Role</button>
-                    <ul className="role-list">
-                        {availableRoles.map(role => (
-                            <li key={role.id}>
-                                <span>{role.name} ({role.alignment})</span>
-                                <button onClick={() => addRoleToGame(role)}>Add</button>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
+            <Typography variant="h5" sx={{ mb: 3 }}>Manage Roles</Typography>
 
-                <div className="selected-roles">
-                    <h3>Selected Roles ({totalRoles})</h3>
-                    {data.role_slots.length === 0 ? <p>No roles selected.</p> : (
-                        <ul className="role-list">
+            <Box sx={{ display: 'flex', gap: 3 }}>
+                {/* Available Roles */}
+                <Box sx={{
+                    flex: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    p: 2,
+                }}>
+                    <Typography variant="h6" sx={{ mb: 1 }}>Available Roles</Typography>
+                    <Button
+                        onClick={() => setIsCreatingRole(true)}
+                        variant="outlined"
+                        size="small"
+                        sx={{ mb: 2 }}
+                    >
+                        + Create New Role
+                    </Button>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {availableRoles.map(role => {
+                            const isSelected = data.role_slots.some(s => s.roleId === role.id);
+                            return (
+                                <Chip
+                                    key={role.id}
+                                    label={`${role.name} (${role.alignment})`}
+                                    variant="outlined"
+                                    onClick={() => addRoleToGame(role)}
+                                    sx={{
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
+                                        ...(isSelected ? selectedChipSx : unselectedChipSx),
+                                    }}
+                                />
+                            );
+                        })}
+                    </Box>
+                </Box>
+
+                {/* Selected Roles */}
+                <Box sx={{
+                    flex: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    p: 2,
+                }}>
+                    <Typography variant="h6" sx={{ mb: 1 }}>
+                        Selected Roles ({totalRoles})
+                    </Typography>
+                    {data.role_slots.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                            No roles selected.
+                        </Typography>
+                    ) : (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                             {data.role_slots.map(slot => (
-                                <li key={slot.roleId}>
-                                    <span>{slot.roleName}</span>
-                                    <div className="count-controls">
-                                        <button onClick={() => updateCount(slot.roleId, slot.count - 1)}>-</button>
-                                        <span>{slot.count}</span>
-                                        <button onClick={() => updateCount(slot.roleId, slot.count + 1)}>+</button>
-                                    </div>
-                                </li>
+                                <Chip
+                                    key={slot.roleId}
+                                    variant="outlined"
+                                    onDelete={() => removeRoleFromGame(slot.roleId)}
+                                    label={
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <span>{slot.roleName}</span>
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updateCount(slot.roleId, slot.count - 1);
+                                                }}
+                                                sx={{ p: 0.25, color: 'text.secondary' }}
+                                            >
+                                                <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
+                                            </IconButton>
+                                            <Typography variant="body2" component="span" sx={{ minWidth: 16, textAlign: 'center' }}>
+                                                {slot.count}
+                                            </Typography>
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updateCount(slot.roleId, slot.count + 1);
+                                                }}
+                                                sx={{ p: 0.25, color: 'text.secondary' }}
+                                            >
+                                                <AddCircleOutlineIcon sx={{ fontSize: 18 }} />
+                                            </IconButton>
+                                        </Box>
+                                    }
+                                    sx={{
+                                        cursor: 'default',
+                                        transition: 'all 0.2s ease',
+                                        ...selectedChipSx,
+                                        '& .MuiChip-label': {
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                        },
+                                    }}
+                                />
                             ))}
-                        </ul>
+                        </Box>
                     )}
                     {totalRoles < data.min_players && (
-                        <p className="warning">Need at least {data.min_players} roles.</p>
+                        <Typography variant="body2" sx={{ color: '#dc3545', mt: 1 }}>
+                            Need at least {data.min_players} roles.
+                        </Typography>
                     )}
                     {totalRoles > data.max_players && (
-                        <p className="warning">Too many roles (max {data.max_players}).</p>
+                        <Typography variant="body2" sx={{ color: '#dc3545', mt: 1 }}>
+                            Too many roles (max {data.max_players}).
+                        </Typography>
                     )}
-                </div>
-            </div>
+                </Box>
+            </Box>
 
             <div className="actions">
-                <button onClick={onBack} className="btn-secondary">Back</button>
-                <button
+                <Button onClick={onBack} variant="outlined" color="secondary">Back</Button>
+                <Button
                     disabled={totalRoles < data.min_players || totalRoles > data.max_players}
                     onClick={onNext}
-                    className="btn-primary"
+                    variant="contained"
+                    color="primary"
                 >
                     Next
-                </button>
+                </Button>
             </div>
         </div>
     );

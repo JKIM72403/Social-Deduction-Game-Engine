@@ -7,17 +7,35 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import FormGroup from '@mui/material/FormGroup';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
+import Popover from '@mui/material/Popover';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { API } from "../services/api";
 import type { AbilityTemplate } from "../types";
+
 
 interface Props {
     roleId?: number;
     onSave: (role: any) => void;
     onCancel: () => void;
 }
+
+const selectedChipSx = {
+    borderColor: '#22c55e',
+    borderWidth: 2,
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+    '&:hover': {
+        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    },
+};
+
+const unselectedChipSx = {
+    borderColor: '#334155',
+    borderWidth: 1,
+    '&:hover': {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    },
+};
 
 export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
     const [abilities, setAbilities] = useState<AbilityTemplate[]>([]);
@@ -27,6 +45,9 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
         description: "",
         abilities: [] as number[],
     });
+
+    const [popoverAnchor, setPopoverAnchor] = useState<HTMLElement | null>(null);
+    const [popoverAbilityId, setPopoverAbilityId] = useState<number | null>(null);
 
     useEffect(() => {
         // Fetch all abilities
@@ -47,6 +68,29 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
             });
         }
     }, [roleId]);
+
+    const toggleAbility = (id: number) => {
+        setRole(r => ({
+            ...r,
+            abilities: r.abilities.includes(id)
+                ? r.abilities.filter(x => x !== id)
+                : [...r.abilities, id],
+        }));
+    };
+
+    const handleInfoClick = (event: React.MouseEvent<HTMLElement | SVGSVGElement>, abilityId: number) => {
+        event.stopPropagation();
+        setPopoverAnchor(event.currentTarget as HTMLElement);
+        setPopoverAbilityId(abilityId);
+    };
+
+    const handlePopoverClose = () => {
+        setPopoverAnchor(null);
+        setPopoverAbilityId(null);
+    };
+
+    const popoverAbility = abilities.find(a => a.id === popoverAbilityId);
+
 
     const submit = async () => {
         try {
@@ -102,42 +146,78 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
 
             <Typography variant="subtitle1" sx={{ mb: 1 }}>Abilities</Typography>
             <Box sx={{
-                maxHeight: 200,
-                overflowY: 'auto',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 1,
                 border: '1px solid',
                 borderColor: 'divider',
                 borderRadius: 1,
                 p: 2,
-                mb: 3
+                mb: 3,
+                minHeight: 60,
             }}>
-                <FormGroup>
-                    {abilities.map(a => (
-                        <FormControlLabel
+                {abilities.map(a => {
+                    const isSelected = role.abilities.includes(a.id);
+                    return (
+                        <Chip
                             key={a.id}
-                            control={
-                                <Checkbox
-                                    checked={role.abilities.includes(a.id)}
-                                    onChange={e => {
-                                        const id = Number(a.id);
-                                        setRole(r => ({
-                                            ...r,
-                                            abilities: e.target.checked
-                                                ? [...r.abilities, id]
-                                                : r.abilities.filter(x => x !== id),
-                                        }));
-                                    }}
-                                />
+                            label={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    {a.name}
+                                    <InfoOutlinedIcon
+                                        fontSize="small"
+                                        onClick={(e) => handleInfoClick(e, a.id)}
+                                        sx={{ cursor: 'pointer', ml: 0.5 }}
+                                    />
+                                </Box>
                             }
-                            label={a.name}
+                            variant="outlined"
+                            onClick={() => toggleAbility(a.id)}
+                            sx={{
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                ...(isSelected ? selectedChipSx : unselectedChipSx),
+                            }}
                         />
-                    ))}
-                </FormGroup>
+
+                    );
+                })}
                 {abilities.length === 0 && (
                     <Typography variant="caption" color="text.secondary">
                         No abilities found.
                     </Typography>
                 )}
             </Box>
+
+            <Popover
+                open={Boolean(popoverAnchor)}
+                anchorEl={popoverAnchor}
+                onClose={handlePopoverClose}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+                slotProps={{
+                    paper: {
+                        sx: {
+                            bgcolor: 'background.paper',
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 2,
+                        }
+                    }
+                }}
+            >
+                {popoverAbility && (
+                    <Box sx={{ p: 2, maxWidth: 280 }}>
+                        <Typography variant="subtitle2">{popoverAbility.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {popoverAbility.ability_type} &middot; {popoverAbility.phase}
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            {popoverAbility.description || "No description available."}
+                        </Typography>
+                    </Box>
+                )}
+            </Popover>
 
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
                 <Button onClick={onCancel} variant="outlined" color="secondary">
