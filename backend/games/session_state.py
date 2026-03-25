@@ -1,3 +1,5 @@
+from typing import Optional
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
@@ -22,7 +24,7 @@ def build_started_session_state(engine) -> dict:
     }
 
 
-def build_session_snapshot(session: GameSession, viewer_user_id: int | None = None) -> dict:
+def build_session_snapshot(session: GameSession, viewer_user_id: Optional[int] = None) -> dict:
     participants = list(
         session.participants.select_related("user").order_by("seat_order", "joined_at")
     )
@@ -92,7 +94,7 @@ def build_session_snapshot(session: GameSession, viewer_user_id: int | None = No
     }
 
 
-def load_session_snapshot(session_id: int, viewer_user_id: int | None = None) -> dict:
+def load_session_snapshot(session_id: int, viewer_user_id: Optional[int] = None) -> dict:
     session = (
         GameSession.objects.select_related("template", "host")
         .prefetch_related("participants__user")
@@ -115,7 +117,7 @@ def broadcast_session_event(session_id: int, reason: str):
     )
 
 
-def _can_view_role(session: GameSession, participant, viewer_user_id: int | None) -> bool:
+def _can_view_role(session: GameSession, participant, viewer_user_id: Optional[int]) -> bool:
     if not participant.role_name:
         return False
 

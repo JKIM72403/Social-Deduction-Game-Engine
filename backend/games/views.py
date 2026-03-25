@@ -562,6 +562,127 @@ def start_game_session(request):
     return Response(serialize_game_state(session_id, engine, user_name))
 
 
+def _get_bot_target(bot, engine, available_players, ability=None, is_vote=False):
+    from .engine import Alignment
+    known_mafia = set()
+    known_town = set()
+
+    if bot.role.alignment == Alignment.MAFIA:
+        for p in engine.players:
+            if p.role.alignment == Alignment.MAFIA:
+                known_mafia.add(p.name)
+
+    for event in engine.events:
+        visible = event.get("visible_to")
+        if visible == "all" or (isinstance(visible, list) and bot.name in visible):
+            if event.get("type") == "investigate":
+                msg = event.get("message", "")
+                if "investigated" in msg and ":" in msg:
+                    try:
+                        target_name = msg.split("investigated ")[1].split(":")[0].strip()
+                        alignment_str = msg.split(":")[1].strip()
+                        if alignment_str == "MAFIA":
+                            known_mafia.add(target_name)
+                        elif alignment_str == "TOWN":
+                            known_town.add(target_name)
+                    except Exception:
+                        pass
+    
+    alive_targets = [p for p in available_players if p.name != bot.name]
+    if not alive_targets:
+        return bot
+
+    is_hostile = False
+    is_helpful = False
+
+    if is_vote:
+        is_hostile = True
+    elif ability:
+        name_lower = ability.name.lower()
+        ability_type = type(ability).__name__
+        if ability_type in ("KillAbility", "BlockAbility", "TrapAbility", "VoteStealAbility"):
+            is_hostile = True
+        elif ability_type in ("ProtectAbility", "DoubleVoteAbility"):
+            is_helpful = True
+        elif "investigate" in name_lower:
+            valid = [p for p in alive_targets if p.name not in known_town and p.name not in known_mafia]
+            if valid:
+                return random.choice(valid)
+
+    if bot.role.alignment == Alignment.MAFIA:
+        if is_hostile:
+            valid = [p for p in alive_targets if p.name not in known_mafia]
+            if valid:
+                return random.choice(valid)
+        elif is_helpful:
+            valid = [p for p in available_players if p.name in known_mafia]
+            if valid:
+                return random.choice(valid)
+        else:
+            valid = [p for p in alive_targets if p.name not in known_mafia]
+            if valid:
+                return random.choice(valid)
+    else:
+        if is_hostile:
+            valid = [p for p in alive_targets if p.name in known_mafia]
+            if valid:
+                return random.choice(valid)
+            valid_unknown = [p for p in alive_targets if p.name not in known_town]
+            if valid_unknown:
+                return random.choice(valid_unknown)
+        elif is_helpful:
+            valid = [p for p in alive_targets if p.name in known_town]
+            if valid:
+                return random.choice(valid)
+            valid_unknown = [p for p in alive_targets if p.name not in known_mafia]
+            if valid_unknown:
+                return random.choice(valid_unknown)
+
+    return random.choice(alive_targets)
+
+
+def _simulate_bots_for_phase(engine):
+    alive_players = engine.get_alive_players()
+    current_phase = engine.phase_state
+
+    for bot in alive_players:
+        if not bot.name.startswith("Bot "):
+            continue
+
+        if current_phase == PhaseState.NIGHT:
+            night_abilities = [
+                (index, ability)
+                for index, ability in enumerate(bot.role.abilities)
+                if ability.phase == "NIGHT"
+            ]
+            if night_abilities:
+                ability_index, ability = night_abilities[0]
+                target = _get_bot_target(bot, engine, alive_players, ability=ability, is_vote=False)
+                engine.handle_input(
+                    bot.name,
+                    {"ability_index": ability_index, "target": target.name},
+                )
+        elif current_phase == PhaseState.VOTING:
+            voting_abilities = [
+                (index, ability)
+                for index, ability in enumerate(bot.role.abilities)
+                if ability.phase == "VOTING"
+            ]
+            if voting_abilities:
+                ability_index, ability = voting_abilities[0]
+                target = _get_bot_target(bot, engine, alive_players, ability=ability, is_vote=False)
+                engine.handle_input(
+                    bot.name,
+                    {"ability_index": ability_index, "target": target.name},
+                )
+
+            target = _get_bot_target(bot, engine, alive_players, ability=None, is_vote=True)
+            engine.handle_input(
+                bot.name,
+                {"action": "vote", "target": target.name},
+            )
+
+
 @api_view(["POST"])
 def game_session_action(request, session_id):
     if session_id not in ACTIVE_GAMES:
@@ -586,7 +707,6 @@ def game_session_action(request, session_id):
         elif action_data is None and current_phase == PhaseState.VOTING:
             user_performed_vote = True
 
-    alive_players = engine.get_alive_players()
     should_advance = True
 
     if current_phase == PhaseState.VOTING:
@@ -594,44 +714,17 @@ def game_session_action(request, session_id):
             should_advance = False
 
     if should_advance:
-        for bot in alive_players:
-            if bot.name == user_name:
-                continue
-
-            if current_phase == PhaseState.NIGHT:
-                night_abilities = [
-                    (index, ability)
-                    for index, ability in enumerate(bot.role.abilities)
-                    if ability.phase == "NIGHT"
-                ]
-                if night_abilities:
-                    ability_index, _ = night_abilities[0]
-                    target = random.choice(alive_players)
-                    engine.handle_input(
-                        bot.name,
-                        {"ability_index": ability_index, "target": target.name},
-                    )
-            elif current_phase == PhaseState.VOTING:
-                voting_abilities = [
-                    (index, ability)
-                    for index, ability in enumerate(bot.role.abilities)
-                    if ability.phase == "VOTING"
-                ]
-                if voting_abilities:
-                    ability_index, _ = voting_abilities[0]
-                    target = random.choice(alive_players)
-                    engine.handle_input(
-                        bot.name,
-                        {"ability_index": ability_index, "target": target.name},
-                    )
-
-                target = random.choice(alive_players)
-                engine.handle_input(
-                    bot.name,
-                    {"action": "vote", "target": target.name},
-                )
-
+        _simulate_bots_for_phase(engine)
         engine.advance_phase()
+
+        while engine.phase_state != PhaseState.GAME_OVER:
+            alive_now = engine.get_alive_players()
+            human_alive = any(not p.name.startswith("Bot ") for p in alive_now)
+            if human_alive:
+                break
+                
+            _simulate_bots_for_phase(engine)
+            engine.advance_phase()
 
     return Response(serialize_game_state(session_id, engine, user_name))
 

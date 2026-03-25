@@ -1,3 +1,5 @@
+from typing import Optional
+
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
@@ -33,7 +35,7 @@ def get_participant_id(session_id: int, user_id: int):
 
 
 @database_sync_to_async
-def set_participant_connection_state(participant_id: int | None, is_connected: bool):
+def set_participant_connection_state(participant_id: Optional[int], is_connected: bool):
     if participant_id is None:
         return
     GameParticipant.objects.filter(id=participant_id).update(is_connected=is_connected)
