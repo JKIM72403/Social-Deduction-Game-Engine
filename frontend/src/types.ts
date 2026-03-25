@@ -43,3 +43,103 @@ export type AbilityTemplate = {
     phase: string;
     description: string;
 };
+
+export type SessionSummary = {
+    id: number;
+    join_code: string;
+    status: "LOBBY" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+    current_phase: "WAITING" | "DAY" | "VOTING" | "NIGHT" | "GAME_OVER";
+    turn_number: number;
+    template_id: number;
+    template_name: string;
+    host_user_id: number | null;
+    host_username: string | null;
+    participant_count: number;
+    ready_count: number;
+    all_ready: boolean;
+    created_at: string;
+    updated_at: string;
+    started_at: string | null;
+    ended_at: string | null;
+};
+
+export type SessionParticipant = {
+    id: number;
+    user_id: number;
+    username: string;
+    display_name: string;
+    seat_order: number;
+    is_ready: boolean;
+    is_connected: boolean;
+    is_alive: boolean;
+    role_name: string;
+    role_alignment: string;
+    joined_at: string;
+    last_seen_at: string;
+};
+
+export type SessionState = {
+    mode?: string;
+    phase?: string;
+    turn_number?: number;
+    phase_index?: number;
+    phase_order?: Array<{ name: string; type: string }>;
+    events?: string[];
+    players?: Array<{
+        participant_id: number;
+        display_name: string;
+        is_alive: boolean;
+    }>;
+    vote_state?: {
+        status?: "OPEN" | "RESOLVED";
+        required_participant_ids?: number[];
+        submitted_participant_ids?: number[];
+        submitted_count?: number;
+        votes_needed?: number;
+        last_result?: {
+            turn_number: number;
+            resolved_at: string;
+            eliminated_participant_id: number | null;
+            eliminated_display_name: string;
+            majority_threshold: number;
+            outcome_message: string;
+            vote_counts: Array<{
+                target_participant_id: number;
+                target_display_name: string;
+                count: number;
+            }>;
+        } | null;
+    };
+};
+
+export type SessionViewer = {
+    participant_id: number;
+    display_name: string;
+    is_alive: boolean;
+    role_name: string;
+    role_alignment: string;
+    has_submitted_vote: boolean;
+    current_vote_target_id: number | null;
+    available_vote_target_ids: number[];
+};
+
+export type SessionSnapshot = {
+    session: SessionSummary;
+    participants: SessionParticipant[];
+    me: SessionViewer | null;
+    state: SessionState;
+};
+
+export type SessionSocketMessage =
+    | {
+        type: "session.snapshot";
+        reason: string;
+        snapshot: SessionSnapshot;
+    }
+    | {
+        type: "pong";
+    }
+    | {
+        type: "error";
+        message: string;
+    };

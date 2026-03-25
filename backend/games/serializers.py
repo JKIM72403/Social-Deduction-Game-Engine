@@ -1,6 +1,17 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import RoleTemplate, AbilityTemplate, RoleAbility, GameTemplate, GameRoleSlot, PhaseTemplate, WinConditionTemplate
+from .models import (
+    AbilityTemplate,
+    GameAction,
+    GameParticipant,
+    GameRoleSlot,
+    GameSession,
+    GameTemplate,
+    PhaseTemplate,
+    RoleAbility,
+    RoleTemplate,
+    WinConditionTemplate,
+)
 
 
 class AbilityTemplateSerializer(serializers.ModelSerializer):
@@ -194,3 +205,66 @@ class SignupSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+
+
+class GameSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GameSession
+        fields = [
+            "id",
+            "template",
+            "host",
+            "join_code",
+            "status",
+            "current_phase",
+            "turn_number",
+            "state_json",
+            "created_at",
+            "updated_at",
+            "started_at",
+            "ended_at",
+        ]
+        read_only_fields = fields
+
+
+class GameParticipantSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+
+    class Meta:
+        model = GameParticipant
+        fields = [
+            "id",
+            "session",
+            "user",
+            "username",
+            "display_name",
+            "seat_order",
+            "is_ready",
+            "is_connected",
+            "is_alive",
+            "role_name",
+            "role_alignment",
+            "joined_at",
+            "last_seen_at",
+            "eliminated_at",
+        ]
+        read_only_fields = fields
+
+
+class CreateSessionSerializer(serializers.Serializer):
+    template_id = serializers.IntegerField()
+    display_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+
+
+class JoinSessionSerializer(serializers.Serializer):
+    join_code = serializers.CharField(max_length=GameSession.JOIN_CODE_LENGTH)
+    display_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+
+
+class SessionReadySerializer(serializers.Serializer):
+    is_ready = serializers.BooleanField(required=False)
+
+
+class SubmitSessionActionSerializer(serializers.Serializer):
+    action_type = serializers.ChoiceField(choices=["VOTE"])
+    target_participant_id = serializers.IntegerField()
