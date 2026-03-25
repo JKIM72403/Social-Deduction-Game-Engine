@@ -102,8 +102,8 @@ def serialize_game_state(session_id, engine, user_name):
 
     players = []
     for p in engine.players:
-        # Hide roles for other alive players
-        reveal_role = not p.is_alive or p.name == user_name
+        # you only ever see your own role, or everyone's roles once the game ends. Dead players' roles stay hidden mid-game
+        reveal_role = p.name == user_name or engine.phase_state == PhaseState.GAME_OVER
         players.append({
             "name": p.name,
             "is_alive": p.is_alive,
@@ -128,7 +128,11 @@ def serialize_game_state(session_id, engine, user_name):
             "alignment": user_player.role.alignment.value if user_player else "Unknown",
             "abilities": abilities
         },
-        "logs": list(engine.events)
+        "logs": [
+            {"type": e["type"], "message": e["message"], "turn": e["turn"]}
+            for e in engine.events
+            if e["visible_to"] == "all" or user_name in e["visible_to"]
+        ]
     }
 
 @api_view(['POST'])
@@ -184,7 +188,7 @@ def game_session_action(request, session_id):
     # Process user action if alive
     user_player = engine.get_player(user_name)
     user_performed_vote = False
-    
+
     if user_player and user_player.is_alive:
         if action_data: # It's an ability or vote
             if current_phase == PhaseState.VOTING and action_data.get('action') == 'vote':
@@ -240,7 +244,7 @@ def game_session_action(request, session_id):
                         "ability_index": idx,
                         "target": target.name
                     })
-                
+
                 target = random.choice(alive_players)
                 engine.handle_input(bot.name, {
                     "action": "vote",

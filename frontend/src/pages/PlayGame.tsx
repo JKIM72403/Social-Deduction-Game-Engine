@@ -19,6 +19,12 @@ type Ability = {
     phase: string;
 };
 
+type LogEvent = {
+    type: "phase_change" | "kill" | "protect" | "investigate" | "vote" | "ability" | "system" | "win";
+    message: string;
+    turn: number;
+};
+
 type GameState = {
     session_id: string;
     phase: string;
@@ -31,7 +37,7 @@ type GameState = {
         alignment: string;
         abilities: Ability[];
     };
-    logs: string[];
+    logs: LogEvent[];
 };
 
 function getPhaseGuidance(gameState: GameState) {
@@ -89,6 +95,28 @@ function getPhaseGuidance(gameState: GameState) {
     };
 }
 
+function getLogStyle(type: LogEvent["type"]): { color: string; fontStyle?: string; fontWeight?: number; fontSize?: string; prefix: string } {
+    switch (type) {
+        case "phase_change":
+            return { color: "#94a3b8", fontStyle: "italic", prefix: "---" };
+        case "kill":
+            return { color: "#ef4444", fontWeight: 600, prefix: "[KILL]" };
+        case "protect":
+            return { color: "#22c55e", prefix: "[SAVE]" };
+        case "investigate":
+            return { color: "#06b6d4", prefix: "[INFO]" };
+        case "vote":
+            return { color: "#f59e0b", prefix: "[VOTE]" };
+        case "ability":
+            return { color: "#8b5cf6", prefix: "[ACT]" };
+        case "win":
+            return { color: "#fbbf24", fontWeight: 700, fontSize: "1.1rem", prefix: "[WIN]" };
+        case "system":
+        default:
+            return { color: "#64748b", fontSize: "0.85rem", prefix: "" };
+    }
+}
+
 export default function PlayGame() {
     const { id: templateId } = useParams();
     const navigate = useNavigate();
@@ -102,7 +130,7 @@ export default function PlayGame() {
     const [selectedAbility, setSelectedAbility] = useState<number>(-1);
     const [selectedAbilityTarget, setSelectedAbilityTarget] = useState<string>("");
     const [selectedVoteTarget, setSelectedVoteTarget] = useState<string>("");
-    
+
     // Voting phase flow
     const [votingSubPhase, setVotingSubPhase] = useState<'ABILITY' | 'VOTE'>('ABILITY');
     const [hasUsedAbilityThisPhase, setHasUsedAbilityThisPhase] = useState(false);
@@ -131,7 +159,7 @@ export default function PlayGame() {
             setSelectedAbility(-1);
             setVotingSubPhase('VOTE');
         }
-        
+
         // Reset ability usage flag on phase change
         if (gameState?.phase !== "VOTING") {
             setHasUsedAbilityThisPhase(false);
@@ -206,10 +234,9 @@ export default function PlayGame() {
             <Paper sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box>
                     <Typography variant="h5" fontWeight={600}>
-                        Phase: {gameState.phase}
-                    </Typography>
-                    <Typography variant="subtitle1" color="text.secondary">
-                        Turn {gameState.turn}
+                        {gameState.phase === "GAME_OVER"
+                            ? "Game Over"
+                            : `${gameState.phase === "VOTING" ? "Voting" : gameState.phase === "NIGHT" ? "Night" : gameState.phase === "DAY" ? "Day" : gameState.phase} — Turn ${gameState.turn}`}
                     </Typography>
                 </Box>
                 <Box sx={{ textAlign: 'right' }}>
@@ -236,11 +263,42 @@ export default function PlayGame() {
                         <Typography variant="h6" gutterBottom>Game Logs</Typography>
                         <Divider sx={{ mb: 2 }} />
                         <List disablePadding>
-                            {gameState.logs.map((log, index) => (
-                                <ListItem key={index} disablePadding sx={{ mb: 1 }}>
-                                    <ListItemText primary={log} primaryTypographyProps={{ variant: 'body2' }} />
-                                </ListItem>
-                            ))}
+                            {gameState.logs.map((log, index) => {
+                                if (log.type === "phase_change") {
+                                    return (
+                                        <Box key={index} sx={{ my: 1.5 }}>
+                                            <Divider sx={{ '&::before, &::after': { borderColor: '#475569' } }}>
+                                                <Typography variant="caption" sx={{
+                                                    color: '#94a3b8',
+                                                    fontWeight: 600,
+                                                    letterSpacing: 1,
+                                                    textTransform: 'uppercase',
+                                                    px: 1,
+                                                }}>
+                                                    {log.message}
+                                                </Typography>
+                                            </Divider>
+                                        </Box>
+                                    );
+                                }
+                                const style = getLogStyle(log.type);
+                                return (
+                                    <ListItem key={index} disablePadding sx={{ mb: 0.5 }}>
+                                        <ListItemText
+                                            primary={`${style.prefix}${style.prefix ? " " : ""}${log.message}`}
+                                            primaryTypographyProps={{
+                                                variant: 'body2',
+                                                sx: {
+                                                    color: style.color,
+                                                    fontStyle: style.fontStyle || 'normal',
+                                                    fontWeight: style.fontWeight || 400,
+                                                    fontSize: style.fontSize || 'inherit',
+                                                }
+                                            }}
+                                        />
+                                    </ListItem>
+                                );
+                            })}
                         </List>
                     </CardContent>
                 </Card>
@@ -276,7 +334,7 @@ export default function PlayGame() {
                                         <ListItem key={p.name} disablePadding sx={{ mb: 1 }}>
                                             <ListItemText
                                                 primary={p.name === gameState.me.name ? `${p.name} (You)` : p.name}
-                                                secondary={p.role}
+                                                secondary={p.role !== "Unknown" ? p.role : undefined}
                                                 sx={{
                                                     textDecoration: 'line-through',
                                                     color: 'text.disabled'
@@ -299,7 +357,7 @@ export default function PlayGame() {
                 <Paper sx={{ p: 3, bgcolor: 'background.paper' }}>
                     <Typography variant="h6" gutterBottom>Take Action</Typography>
                     <Divider sx={{ mb: 2 }} />
-                    
+
                     {!gameState.me.is_alive ? (
                         <Typography color="text.secondary">You are dead. Wait for the game to finish.</Typography>
                     ) : (
@@ -325,7 +383,7 @@ export default function PlayGame() {
                                                         ))}
                                                     </Select>
                                                 </FormControl>
-                                                
+
                                                 <FormControl size="small" sx={{ minWidth: 150 }}>
                                                     <Select
                                                         value={selectedAbilityTarget}
@@ -389,21 +447,21 @@ export default function PlayGame() {
                                                         ))}
                                                     </Select>
                                                 </FormControl>
-                                                <Button 
+                                                <Button
                                                     onClick={async () => {
                                                         await handleAction({ ability_index: selectedAbility, target: selectedAbilityTarget });
                                                         setHasUsedAbilityThisPhase(true);
                                                         setVotingSubPhase('VOTE');
-                                                    }} 
-                                                    variant="contained" 
-                                                    color="primary" 
+                                                    }}
+                                                    variant="contained"
+                                                    color="primary"
                                                     disabled={isSubmitting || !selectedAbilityTarget}
                                                 >
                                                     Use Ability
                                                 </Button>
-                                                <Button 
-                                                    onClick={() => setVotingSubPhase('VOTE')} 
-                                                    variant="text" 
+                                                <Button
+                                                    onClick={() => setVotingSubPhase('VOTE')}
+                                                    variant="text"
                                                     disabled={isSubmitting}
                                                 >
                                                     Skip to Vote
@@ -454,9 +512,9 @@ export default function PlayGame() {
             ) : (
                 <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
                     <Typography variant="h4" gutterBottom>Game Over!</Typography>
-                    <Button 
-                        variant="contained" 
-                        color="primary" 
+                    <Button
+                        variant="contained"
+                        color="primary"
                         onClick={() => navigate("/")}
                         sx={{ mt: 2 }}
                     >

@@ -33,40 +33,40 @@ class Ability:
 class KillAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         if target.status_effects.get("protected"):
-            game.log(f"{target.name} was attacked but survived!")
+            game.log(f"{target.name} was attacked but survived!", "protect", "all")
         else:
             target.is_alive = False
-            game.log(f"{target.name} was killed!")
+            game.log(f"{target.name} was killed!", "kill", "all")
 
 class ProtectAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         target.status_effects["protected"] = True
-        game.log(f"{target.name} is protected.")
+        game.log(f"{target.name} is protected.", "protect", [source.name])
 
 class InvestigateAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         # In a real game, this info would be sent privately to the source
-        game.log(f"{source.name} investigated {target.name}: {target.role.alignment.value}")
+        game.log(f"You investigated {target.name}: {target.role.alignment.value}", "investigate", [source.name])
 
 class BlockAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         target.status_effects["blocked"] = True
-        game.log(f"{source.name} blocked {target.name} from acting!")
+        game.log(f"You blocked {target.name} from acting!", "ability", [source.name])
 
 class TrapAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         target.status_effects["trapped_by"] = source
-        game.log(f"{source.name} strategically placed a trap at {target.name}'s house.")
+        game.log(f"You placed a trap at {target.name}'s house.", "ability", [source.name])
 
 class VoteStealAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         target.status_effects["vote_stolen"] = True
-        game.log(f"{source.name} stole {target.name}'s vote!")
+        game.log(f"You stole {target.name}'s vote!", "ability", [source.name])
 
 class DoubleVoteAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         target.status_effects["double_vote"] = True
-        game.log(f"{source.name} gave a double vote effect to {target.name}!")
+        game.log(f"You gave a double vote effect to {target.name}!", "ability", [source.name])
 
 class Role:
     def __init__(self, name: str, alignment: Alignment, abilities: List[Ability] = None):
@@ -115,7 +115,7 @@ class DayPhase(Phase):
         self.pending_actions: List[Action] = []
 
     def start(self):
-        self.game.log("Day breaks. Discussion begins.")
+        self.game.log("Day breaks. Discussion begins.", "phase_change")
         self.pending_actions = []
 
     def end(self):
@@ -138,17 +138,17 @@ class DayPhase(Phase):
         if ability_idx is not None and 0 <= ability_idx < len(player.role.abilities):
             ability = player.role.abilities[ability_idx]
             if ability.phase != "DAY":
-                self.game.log(f"DEBUG: {player_name} tried to use {ability.name} ({ability.phase}) during DAY phase.")
+                self.game.log(f"Cannot use {ability.name} during DAY phase.", "system", [player_name])
                 return
 
             target = self.game.get_player(target_name) if target_name else player
             if target:
                 self.pending_actions.append(Action(player, ability, target))
-                self.game.log(f"{player_name} queued a day action.")
+                self.game.log("You queued a day action.", "ability", [player_name])
 
 class VotingPhase(Phase):
     def start(self):
-        self.game.log("Voting logic initiated. Players can vote for execution.")
+        self.game.log("Voting has begun. Vote for who to eliminate.", "phase_change")
         for p in self.game.players:
             p.votes_received = 0
             # Reset nightly statuses if they lingered from day
@@ -158,7 +158,7 @@ class VotingPhase(Phase):
 
     def end(self):
         # Resolve any vote-manipulating abilities first
-        self.game.log("Resolving vote manipulation abilities...")
+        self.game.log("Resolving vote manipulation abilities...", "system")
         self.pending_actions.sort(key=lambda a: a.ability.priority)
         for action in self.pending_actions:
             if action.source.is_alive:
@@ -166,7 +166,7 @@ class VotingPhase(Phase):
 
         # Tally votes
         if not self.votes:
-            self.game.log("No votes cast.")
+            self.game.log("No votes cast.", "vote")
             return
 
         counts = {}
@@ -178,7 +178,7 @@ class VotingPhase(Phase):
             if voter and voter.status_effects.get("vote_stolen"):
                 missing_votes += 1
                 continue
-                
+
             vote_weight = 1
             if voter and voter.status_effects.get("double_vote"):
                 vote_weight = 2
@@ -188,9 +188,9 @@ class VotingPhase(Phase):
 
         net_diff = extra_votes - missing_votes
         if net_diff > 0:
-            self.game.log(f"{net_diff} extra vote(s) were counted!")
+            self.game.log(f"{net_diff} extra vote(s) were counted!", "vote")
         elif net_diff < 0:
-            self.game.log(f"{abs(net_diff)} vote(s) mysteriously went missing!")
+            self.game.log(f"{abs(net_diff)} vote(s) mysteriously went missing!", "vote")
 
         # Find max
         max_votes = 0
@@ -203,10 +203,10 @@ class VotingPhase(Phase):
         if candidate and max_votes > len(self.game.get_alive_players()) // 2:
             target_player = self.game.get_player(candidate)
             if target_player:
-                self.game.log(f"{target_player.name} was voted out!")
+                self.game.log(f"{target_player.name} was voted out!", "kill")
                 target_player.is_alive = False
         else:
-            self.game.log("No one received enough votes.")
+            self.game.log("No one received enough votes.", "vote")
 
     def handle_input(self, player_name: str, data: dict):
         if not data:
@@ -218,21 +218,21 @@ class VotingPhase(Phase):
         if data.get("action") == "vote":
             target_name = data.get("target")
             self.votes[player_name] = target_name
-            self.game.log(f"{player_name} voted for {target_name}")
-        
+            self.game.log(f"{player_name} voted for {target_name}.", "vote")
+
         # Also handle abilities if passed (e.g. Vote Steal, Double Vote)
         ability_idx = data.get("ability_index")
         target_name = data.get("target")
         if ability_idx is not None and 0 <= ability_idx < len(player.role.abilities):
             ability = player.role.abilities[ability_idx]
             if ability.phase != "VOTING":
-                self.game.log(f"DEBUG: {player_name} tried to use {ability.name} ({ability.phase}) during VOTING phase.")
+                self.game.log(f"Cannot use {ability.name} during VOTING phase.", "system", [player_name])
                 return
-            
+
             target = self.game.get_player(target_name) if target_name else player
             if target:
                 self.pending_actions.append(Action(player, ability, target))
-                self.game.log(f"{player_name} used an ability ({ability.name}).")
+                self.game.log(f"You used {ability.name}.", "ability", [player_name])
 
 class NightPhase(Phase):
     def __init__(self, game):
@@ -240,27 +240,27 @@ class NightPhase(Phase):
         self.pending_actions: List[Action] = []
 
     def start(self):
-        self.game.log("Night falls. Roles with abilities may act.")
+        self.game.log("Night falls. Roles with abilities may act.", "phase_change")
         self.pending_actions = []
 
     def end(self):
-        self.game.log("Night actions are resolving...")
+        self.game.log("Night actions are resolving...", "system")
         # Sort by priority
         self.pending_actions.sort(key=lambda a: a.ability.priority)
-        
+
         for action in self.pending_actions:
             if action.source.is_alive: # Ensure killer didn't die mid-resolution
                 if action.ability.priority > 0 and action.source.status_effects.get("blocked"):
-                    self.game.log(f"{action.source.name} was blocked and could not perform their action.")
+                    self.game.log("You were blocked and could not perform your action.", "ability", [action.source.name])
                     continue
 
                 if action.ability.priority > 0 and "trapped_by" in action.target.status_effects:
                     trapper = action.target.status_effects["trapped_by"]
-                    self.game.log(f"[TRAP] {trapper.name} saw {action.source.name} visit {action.target.name} and scared them off!")
+                    self.game.log(f"Your trap caught {action.source.name} visiting {action.target.name}!", "ability", [trapper.name])
                     continue
 
                 action.ability.execute(action.source, action.target, self.game)
-        
+
         # Reset nightly statuses
         for p in self.game.players:
             p.status_effects = {}
@@ -280,11 +280,11 @@ class NightPhase(Phase):
         if ability_idx is not None and 0 <= ability_idx < len(player.role.abilities) and target:
             ability = player.role.abilities[ability_idx]
             if ability.phase != "NIGHT":
-                self.game.log(f"DEBUG: {player_name} tried to use {ability.name} ({ability.phase}) during NIGHT phase.")
+                self.game.log(f"Cannot use {ability.name} during NIGHT phase.", "system", [player_name])
                 return
 
             self.pending_actions.append(Action(player, ability, target))
-            self.game.log(f"{player_name} queued an action.")
+            self.game.log("You queued a night action.", "ability", [player_name])
 
 
 # --- Main Engine ---
@@ -301,7 +301,7 @@ class GameEngine:
         self.phase_index = -1
         self.phase_state: PhaseState = PhaseState.WAITING
         self.current_phase: Phase = None
-        self.events: List[str] = []
+        self.events: List[dict] = []
         self.turn_number = 1
         self._started = False
 
@@ -317,9 +317,15 @@ class GameEngine:
     def get_alive_players(self) -> List[Player]:
         return [p for p in self.players if p.is_alive]
 
-    def log(self, message: str):
-        self.events.append(f"[Turn {self.turn_number}] {message}")
-        print(f"[Turn {self.turn_number}] {message}")
+    def log(self, message: str, event_type: str = "system", visible_to="all"):
+        event = {
+            "type": event_type,
+            "message": message,
+            "turn": self.turn_number,
+            "visible_to": visible_to,
+        }
+        self.events.append(event)
+        print(f"[Turn {self.turn_number}] [{event_type}] {message}")
 
     def start_game(self):
         self.turn_number = 1
@@ -330,13 +336,13 @@ class GameEngine:
         self.phase_index = (self.phase_index + 1) % len(self.phase_configs)
         config = self.phase_configs[self.phase_index]
         new_state = PhaseState[config['type']]
-        
+
         # Increment turn number when we cycle back to the first phase (index 0)
         # but only if we've already been through at least one phase (index > 0 before increment)
         # Wait, simply increment if it laps.
         if self.phase_index == 0 and hasattr(self, '_started') and self._started:
             self.turn_number += 1
-        
+
         self._started = True
         self.transition_to(new_state, config['name'])
 
@@ -348,8 +354,8 @@ class GameEngine:
                 return
 
         self.phase_state = new_state
-        self.log(f"Entering {phase_name or new_state.value}")
-        
+        self.log(f"Entering {phase_name or new_state.value}", "phase_change")
+
         if new_state == PhaseState.DAY:
             self.current_phase = DayPhase(self)
         elif new_state == PhaseState.VOTING:
@@ -369,16 +375,16 @@ class GameEngine:
 
     def check_win_conditions(self):
         alive = self.get_alive_players()
-        
+
         # If no win conditions defined, use default fallback
         if not self.win_condition_configs:
             mafia_count = sum(1 for p in alive if p.role.alignment == Alignment.MAFIA)
             town_count = sum(1 for p in alive if p.role.alignment == Alignment.TOWN)
             if mafia_count == 0:
-                self.log("Town wins!")
+                self.log("Town wins!", "win")
                 self.phase_state = PhaseState.GAME_OVER
             elif mafia_count >= town_count:
-                self.log("Mafia wins!")
+                self.log("Mafia wins!", "win")
                 self.phase_state = PhaseState.GAME_OVER
             return
 
@@ -388,7 +394,7 @@ class GameEngine:
                 ctype = criterion.get('type')
                 target = criterion.get('target')
                 count = criterion.get('count', 0)
-                
+
                 if ctype == 'ROLE_COUNT':
                     actual_count = sum(1 for p in alive if p.role.name == target) # Using name for simplicity in engine
                     if actual_count != count:
@@ -400,9 +406,9 @@ class GameEngine:
                 elif ctype == 'SURVIVAL':
                     if self.turn_number < count:
                         met = False; break
-            
+
             if met:
-                self.log(f"WIN CONDITION MET: {wc.get('name')}! {wc.get('winner_alignment')} Victory!")
+                self.log(f"WIN CONDITION MET: {wc.get('name')}! {wc.get('winner_alignment')} Victory!", "win")
                 self.phase_state = PhaseState.GAME_OVER
                 return
 
