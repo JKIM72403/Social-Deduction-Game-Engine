@@ -5,6 +5,7 @@ import {
     Box, Typography, Card, CardContent, Button, FormControl, Select, MenuItem,
     Paper, List, ListItem, ListItemText, CircularProgress, Divider, Alert, Snackbar
 } from "@mui/material";
+import { formatLogMessage } from "../utils";
 
 type Player = {
     name: string;
@@ -285,7 +286,7 @@ export default function PlayGame() {
                                 return (
                                     <ListItem key={index} disablePadding sx={{ mb: 0.5 }}>
                                         <ListItemText
-                                            primary={`${style.prefix}${style.prefix ? " " : ""}${log.message}`}
+                                            primary={`${style.prefix}${style.prefix ? " " : ""}${formatLogMessage(log.message, gameState.me.name)}`}
                                             primaryTypographyProps={{
                                                 variant: 'body2',
                                                 sx: {
@@ -315,10 +316,12 @@ export default function PlayGame() {
                                 <ListItem key={p.name} disablePadding sx={{ mb: 1 }}>
                                     <ListItemText
                                         primary={p.name === gameState.me.name ? `${p.name} (You)` : p.name}
+                                        secondary={p.role !== "Unknown" ? p.role : undefined}
                                         primaryTypographyProps={{
                                             fontWeight: p.name === gameState.me.name ? 700 : 400,
                                             color: p.name === gameState.me.name ? 'primary.main' : 'text.primary'
                                         }}
+                                        secondaryTypographyProps={{ color: 'success.main' }}
                                     />
                                 </ListItem>
                             ))}

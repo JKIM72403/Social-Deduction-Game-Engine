@@ -28,6 +28,7 @@ import {
   submitSessionVote,
 } from "../services/sessions";
 import type { SessionParticipant, SessionSnapshot, SessionSocketMessage } from "../types";
+import { formatLogMessage } from "../utils";
 
 type SocketStatus = "connecting" | "connected" | "disconnected";
 
@@ -595,7 +596,7 @@ export default function SessionLobby() {
             <List disablePadding>
               {snapshot.state.events.slice(-10).map((event) => (
                 <ListItem key={event} disablePadding sx={{ py: 0.5 }}>
-                  <ListItemText primary={event} primaryTypographyProps={{ variant: "body2" }} />
+                  <ListItemText primary={formatLogMessage(event, me?.display_name)} primaryTypographyProps={{ variant: "body2" }} />
                 </ListItem>
               ))}
             </List>
