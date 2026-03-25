@@ -436,6 +436,7 @@ const GameEditor = () => {
                     onDeleteWinCondition={handleDeleteWinCondition}
                     onCancel={() => setSelection({ type: 'GAME_SETTINGS' })}
                     onEditRoleDetails={(id: number) => setSelection({ type: 'EDIT_ROLE_DETAILS', id })}
+                    onSwitchToCustomRoleEditor={() => setSelection({ type: 'CREATE_CUSTOM_ROLE' })}
                 />
             </Box>
 

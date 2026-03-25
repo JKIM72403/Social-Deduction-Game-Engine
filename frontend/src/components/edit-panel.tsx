@@ -5,6 +5,7 @@ import Button from '@mui/material/Button';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import RoleEditor from './RoleEditor';
+import RoleSelector from './RoleSelector';
 import PhaseEditor from './PhaseEditor';
 import WinConditionEditor from './WinConditionEditor';
 import type { GameData, Phase, WinCondition } from '../types';
@@ -21,6 +22,7 @@ export type Selection =
     | { type: 'GAME_SETTINGS' }
     | { type: 'ROLE', id: number }
     | { type: 'NEW_ROLE' }
+    | { type: 'CREATE_CUSTOM_ROLE' }
     | { type: 'EDIT_ROLE_DETAILS', id: number }
     | { type: 'NEW_ABILITY' }
     | { type: 'EDIT_ABILITY_DETAILS', id: number }
@@ -42,6 +44,7 @@ interface EditPanelProps {
     onDeleteWinCondition: (id?: number, index?: number) => void;
     onCancel: () => void;
     onEditRoleDetails: (id: number) => void;
+    onSwitchToCustomRoleEditor: () => void;
 }
 
 const EditPanel = ({
@@ -55,7 +58,8 @@ const EditPanel = ({
     onSaveWinCondition,
     onDeleteWinCondition,
     onCancel,
-    onEditRoleDetails
+    onEditRoleDetails,
+    onSwitchToCustomRoleEditor
 }: EditPanelProps) => {
     if (!selection) {
         return (
@@ -126,6 +130,19 @@ const EditPanel = ({
     }
 
     if (selection.type === 'NEW_ROLE') {
+        return (
+            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+                <RoleSelector
+                    existingSlots={gameData.role_slots}
+                    onSelectRole={onSaveRole}
+                    onCreateCustomRole={onSwitchToCustomRoleEditor}
+                    onCancel={onCancel}
+                />
+            </Box>
+        );
+    }
+
+    if (selection.type === 'CREATE_CUSTOM_ROLE') {
         return (
             <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
                 <RoleEditor onSave={onSaveRole} onCancel={onCancel} />

@@ -44,6 +44,14 @@ export type AbilityTemplate = {
     description: string;
 };
 
+export type RoleTemplate = {
+    id: number;
+    name: string;
+    alignment: 'TOWN' | 'MAFIA' | 'NEUTRAL';
+    description: string;
+    ability_details: AbilityTemplate[];
+};
+
 export type SessionSummary = {
     id: number;
     join_code: string;
