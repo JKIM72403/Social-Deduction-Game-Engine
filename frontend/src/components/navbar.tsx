@@ -32,6 +32,9 @@ const Navbar = () => {
                     </Button>
                     {user ? (
                         <>
+                            <Button color="inherit" component={RouterLink} to="/multiplayer">
+                                Join Lobby
+                            </Button>
                             <Button variant="contained" color="secondary" component={RouterLink} to="/create-game">
                                 Create Game
                             </Button>

@@ -1,8 +1,32 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 from .models import GameSession
 
 
-def build_session_snapshot(session: GameSession) -> dict:
-    participants = session.participants.select_related("user").order_by("seat_order", "joined_at")
+def build_started_session_state(engine) -> dict:
+    return {
+        "phase": engine.phase_state.value,
+        "turn_number": engine.turn_number,
+        "phase_index": engine.phase_index,
+        "phase_order": list(engine.phase_configs),
+        "events": list(engine.events),
+        "players": [
+            {
+                "display_name": player.name,
+                "is_alive": player.is_alive,
+            }
+            for player in engine.players
+        ],
+    }
+
+
+def build_session_snapshot(session: GameSession, viewer_user_id: int | None = None) -> dict:
+    participants = list(
+        session.participants.select_related("user").order_by("seat_order", "joined_at")
+    )
+    ready_count = sum(1 for participant in participants if participant.is_ready)
+    participant_count = len(participants)
 
     return {
         "session": {
@@ -15,8 +39,13 @@ def build_session_snapshot(session: GameSession) -> dict:
             "template_name": session.template.name,
             "host_user_id": session.host_id,
             "host_username": session.host.username if session.host else None,
+            "participant_count": participant_count,
+            "ready_count": ready_count,
+            "all_ready": participant_count > 0 and ready_count == participant_count,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "ended_at": session.ended_at.isoformat() if session.ended_at else None,
         },
         "participants": [
             {
@@ -28,8 +57,12 @@ def build_session_snapshot(session: GameSession) -> dict:
                 "is_ready": participant.is_ready,
                 "is_connected": participant.is_connected,
                 "is_alive": participant.is_alive,
-                "role_name": participant.role_name,
-                "role_alignment": participant.role_alignment,
+                "role_name": participant.role_name
+                if _can_view_role(session, participant, viewer_user_id)
+                else "",
+                "role_alignment": participant.role_alignment
+                if _can_view_role(session, participant, viewer_user_id)
+                else "",
                 "joined_at": participant.joined_at.isoformat(),
                 "last_seen_at": participant.last_seen_at.isoformat(),
             }
@@ -37,3 +70,42 @@ def build_session_snapshot(session: GameSession) -> dict:
         ],
         "state": session.state_json,
     }
+
+
+def load_session_snapshot(session_id: int, viewer_user_id: int | None = None) -> dict:
+    session = (
+        GameSession.objects.select_related("template", "host")
+        .prefetch_related("participants__user")
+        .get(id=session_id)
+    )
+    return build_session_snapshot(session, viewer_user_id=viewer_user_id)
+
+
+def broadcast_session_event(session_id: int, reason: str):
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+
+    async_to_sync(channel_layer.group_send)(
+        f"session_{session_id}",
+        {
+            "type": "session.event",
+            "reason": reason,
+        },
+    )
+
+
+def _can_view_role(session: GameSession, participant, viewer_user_id: int | None) -> bool:
+    if not participant.role_name:
+        return False
+
+    if viewer_user_id == participant.user_id:
+        return True
+
+    if not participant.is_alive:
+        return True
+
+    if session.status in {GameSession.STATUS_COMPLETED, GameSession.STATUS_CANCELLED}:
+        return True
+
+    return False

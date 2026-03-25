@@ -2,7 +2,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from .models import GameParticipant, GameSession
-from .session_state import build_session_snapshot
+from .session_state import load_session_snapshot
 
 
 @database_sync_to_async
@@ -40,13 +40,8 @@ def set_participant_connection_state(participant_id: int | None, is_connected: b
 
 
 @database_sync_to_async
-def get_snapshot(session_id: int):
-    session = (
-        GameSession.objects.select_related("template", "host")
-        .prefetch_related("participants__user")
-        .get(id=session_id)
-    )
-    return build_session_snapshot(session)
+def get_snapshot(session_id: int, viewer_user_id: int):
+    return load_session_snapshot(session_id, viewer_user_id=viewer_user_id)
 
 
 class GameSessionConsumer(AsyncJsonWebsocketConsumer):
@@ -67,7 +62,7 @@ class GameSessionConsumer(AsyncJsonWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await set_participant_connection_state(self.participant_id, True)
-        snapshot = await get_snapshot(self.session_id)
+        snapshot = await get_snapshot(self.session_id, user.id)
 
         await self.accept()
         await self.send_json(
@@ -77,6 +72,13 @@ class GameSessionConsumer(AsyncJsonWebsocketConsumer):
                 "snapshot": snapshot,
             }
         )
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": "session.event",
+                "reason": "participant.connected",
+            },
+        )
 
     async def disconnect(self, close_code):
         group_name = getattr(self, "group_name", None)
@@ -85,6 +87,13 @@ class GameSessionConsumer(AsyncJsonWebsocketConsumer):
 
         await set_participant_connection_state(getattr(self, "participant_id", None), False)
         await self.channel_layer.group_discard(group_name, self.channel_name)
+        await self.channel_layer.group_send(
+            group_name,
+            {
+                "type": "session.event",
+                "reason": "participant.disconnected",
+            },
+        )
 
     async def receive_json(self, content, **kwargs):
         message_type = content.get("type")
@@ -98,7 +107,7 @@ class GameSessionConsumer(AsyncJsonWebsocketConsumer):
                 {
                     "type": "session.snapshot",
                     "reason": "manual_refresh",
-                    "snapshot": await get_snapshot(self.session_id),
+                    "snapshot": await get_snapshot(self.session_id, self.scope["user"].id),
                 }
             )
             return
@@ -107,5 +116,14 @@ class GameSessionConsumer(AsyncJsonWebsocketConsumer):
             {
                 "type": "error",
                 "message": f"Unsupported websocket message type: {message_type!r}",
+            }
+        )
+
+    async def session_event(self, event):
+        await self.send_json(
+            {
+                "type": "session.snapshot",
+                "reason": event["reason"],
+                "snapshot": await get_snapshot(self.session_id, self.scope["user"].id),
             }
         )

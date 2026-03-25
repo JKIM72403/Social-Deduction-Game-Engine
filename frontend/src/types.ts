@@ -43,3 +43,69 @@ export type AbilityTemplate = {
     phase: string;
     description: string;
 };
+
+export type SessionSummary = {
+    id: number;
+    join_code: string;
+    status: "LOBBY" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+    current_phase: "WAITING" | "DAY" | "VOTING" | "NIGHT" | "GAME_OVER";
+    turn_number: number;
+    template_id: number;
+    template_name: string;
+    host_user_id: number | null;
+    host_username: string | null;
+    participant_count: number;
+    ready_count: number;
+    all_ready: boolean;
+    created_at: string;
+    updated_at: string;
+    started_at: string | null;
+    ended_at: string | null;
+};
+
+export type SessionParticipant = {
+    id: number;
+    user_id: number;
+    username: string;
+    display_name: string;
+    seat_order: number;
+    is_ready: boolean;
+    is_connected: boolean;
+    is_alive: boolean;
+    role_name: string;
+    role_alignment: string;
+    joined_at: string;
+    last_seen_at: string;
+};
+
+export type SessionState = {
+    phase?: string;
+    turn_number?: number;
+    phase_index?: number;
+    phase_order?: Array<{ name: string; type: string }>;
+    events?: string[];
+    players?: Array<{
+        display_name: string;
+        is_alive: boolean;
+    }>;
+};
+
+export type SessionSnapshot = {
+    session: SessionSummary;
+    participants: SessionParticipant[];
+    state: SessionState;
+};
+
+export type SessionSocketMessage =
+    | {
+        type: "session.snapshot";
+        reason: string;
+        snapshot: SessionSnapshot;
+    }
+    | {
+        type: "pong";
+    }
+    | {
+        type: "error";
+        message: string;
+    };

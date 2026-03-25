@@ -5,6 +5,8 @@ import GameEditor from "./pages/GameEditor";
 import PlayGame from "./pages/PlayGame";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import LobbyLanding from "./pages/LobbyLanding";
+import SessionLobby from "./pages/SessionLobby";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function AppRoutes() {
@@ -18,6 +20,8 @@ export default function AppRoutes() {
                     <Route path="play-game/:id" element={<PlayGame />} />
 
                     <Route element={<ProtectedRoute />}>
+                        <Route path="multiplayer" element={<LobbyLanding />} />
+                        <Route path="sessions/:sessionId" element={<SessionLobby />} />
                         <Route path="create-game" element={<GameEditor />} />
                         <Route path="edit-game/:id" element={<GameEditor />} />
                     </Route>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { Box, Typography, Card, CardContent, CardActions, Button, CircularProgress } from "@mui/material";
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -10,6 +10,7 @@ import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 import { API } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
+import { createSession } from "../services/sessions";
 
 type GameTemplate = {
     id: number;
@@ -22,8 +23,10 @@ type GameTemplate = {
 
 export default function Home() {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [games, setGames] = useState<GameTemplate[]>([]);
     const [loading, setLoading] = useState(true);
+    const [creatingSessionFor, setCreatingSessionFor] = useState<number | null>(null);
 
     const [deleteGame, setDeleteGame] = useState<GameTemplate | null>(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
@@ -60,14 +63,44 @@ export default function Home() {
 
     const isOwner = (game: GameTemplate) => user !== null && game.creator_id === user.id;
 
+    const handleHostLobby = async (game: GameTemplate) => {
+        if (!user) {
+            navigate("/login");
+            return;
+        }
+
+        setCreatingSessionFor(game.id);
+        try {
+            const snapshot = await createSession(game.id, user.username);
+            navigate(`/sessions/${snapshot.session.id}`);
+        } catch (err: any) {
+            console.error(err);
+            const message =
+                err?.response?.data?.error ||
+                "Unable to create a lobby for that template right now.";
+            setSnackbar({ open: true, message, severity: 'error' });
+        } finally {
+            setCreatingSessionFor(null);
+        }
+    };
+
     return (
         <Box sx={{ p: 4, maxWidth: 1200, mx: 'auto' }}>
-            <Typography variant="h4" gutterBottom>
-                Game Templates
-            </Typography>
-            <Typography variant="body1" color="text.secondary" gutterBottom>
-                Select a game to play, or create a new one.
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, alignItems: { xs: 'flex-start', md: 'center' }, flexDirection: { xs: 'column', md: 'row' } }}>
+                <Box>
+                    <Typography variant="h4" gutterBottom>
+                        Game Templates
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary" gutterBottom>
+                        Run a solo demo with `Play`, or host a multiplayer lobby and share the generated join code with your group.
+                    </Typography>
+                </Box>
+                {user && (
+                    <Button variant="outlined" color="secondary" component={RouterLink} to="/multiplayer">
+                        Join Lobby by Code
+                    </Button>
+                )}
+            </Box>
 
             <Box sx={{ mt: 4 }}>
                 {loading ? (
@@ -94,13 +127,24 @@ export default function Home() {
                                         <Box sx={{ display: 'flex', gap: 1 }}>
                                             <Button
                                                 size="small"
-                                                variant="contained"
+                                                variant="outlined"
                                                 color="primary"
                                                 component={RouterLink}
                                                 to={`/play-game/${game.id}`}
                                             >
-                                                Play
+                                                Play Solo
                                             </Button>
+                                            {user && (
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    color="secondary"
+                                                    onClick={() => void handleHostLobby(game)}
+                                                    disabled={creatingSessionFor === game.id}
+                                                >
+                                                    {creatingSessionFor === game.id ? "Creating..." : "Host Lobby"}
+                                                </Button>
+                                            )}
                                             {isOwner(game) && (
                                                 <Button
                                                     size="small"
