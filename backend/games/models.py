@@ -264,6 +264,7 @@ class GameAction(models.Model):
         related_name="actions",
         on_delete=models.CASCADE,
     )
+    turn_number = models.PositiveIntegerField(default=0)
     phase = models.CharField(max_length=20, blank=True, default="")
     action_type = models.CharField(max_length=50)
     payload = models.JSONField(default=dict, blank=True)

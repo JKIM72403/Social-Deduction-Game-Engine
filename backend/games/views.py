@@ -15,6 +15,7 @@ from .engine import Alignment, PhaseState
 from .engine_builder import build_game_engine
 from .models import (
     AbilityTemplate,
+    GameAction,
     GameParticipant,
     GameSession,
     GameTemplate,
@@ -32,12 +33,13 @@ from .serializers import (
     RoleTemplateSerializer,
     SessionReadySerializer,
     SignupSerializer,
+    SubmitSessionActionSerializer,
     UserSerializer,
     WinConditionTemplateSerializer,
 )
+from .session_runtime import build_started_session_state, record_vote_progress, resolve_voting_round
 from .session_state import (
     broadcast_session_event,
-    build_started_session_state,
     load_session_snapshot,
 )
 
@@ -321,6 +323,7 @@ def start_network_session(request, session_id):
             [participant.display_name for participant in participants],
         )
         engine.start_game()
+        started_state = build_started_session_state(engine, participants)
     except ValueError as exc:
         return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -339,9 +342,10 @@ def start_network_session(request, session_id):
         )
         session.status = GameSession.STATUS_IN_PROGRESS
         session.current_phase = engine.phase_state.value
-        session.turn_number = engine.turn_number
+        session.turn_number = started_state["turn_number"]
         session.started_at = timezone.now()
-        session.state_json = build_started_session_state(engine)
+        session.state_json = started_state
+        session.current_phase = started_state["phase"]
         session.save(
             update_fields=[
                 "status",
@@ -356,6 +360,131 @@ def start_network_session(request, session_id):
             lambda session_id=session.id: broadcast_session_event(
                 session_id,
                 "session.started",
+            )
+        )
+
+    return Response(load_session_snapshot(session.id, viewer_user_id=request.user.id))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_network_session_action(request, session_id):
+    serializer = SubmitSessionActionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    session = (
+        GameSession.objects.select_related("template", "host")
+        .prefetch_related("participants__user", "template__win_conditions")
+        .filter(id=session_id)
+        .first()
+    )
+    if session is None:
+        return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    participant = session.participants.filter(user=request.user).first()
+    if participant is None:
+        return Response({"error": "Not a session participant"}, status=status.HTTP_403_FORBIDDEN)
+
+    if session.status != GameSession.STATUS_IN_PROGRESS:
+        return Response(
+            {"error": "The session is not currently in progress"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if session.current_phase != GameSession.PHASE_VOTING:
+        return Response(
+            {"error": "Votes can only be submitted during the voting phase"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not participant.is_alive:
+        return Response(
+            {"error": "Eliminated participants cannot vote"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    target_participant = session.participants.filter(
+        id=serializer.validated_data["target_participant_id"]
+    ).first()
+    if target_participant is None:
+        return Response({"error": "Vote target not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not target_participant.is_alive:
+        return Response(
+            {"error": "You can only vote for living participants"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    existing_vote = session.actions.filter(
+        participant=participant,
+        phase=GameSession.PHASE_VOTING,
+        action_type="VOTE",
+        status=GameAction.STATUS_SUBMITTED,
+        turn_number=session.turn_number,
+    ).first()
+    if existing_vote is not None:
+        return Response(
+            {"error": "You have already locked in your vote for this round"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        GameAction.objects.create(
+            session=session,
+            participant=participant,
+            turn_number=session.turn_number,
+            phase=GameSession.PHASE_VOTING,
+            action_type="VOTE",
+            payload={
+                "target_participant_id": target_participant.id,
+                "target_display_name": target_participant.display_name,
+            },
+        )
+
+        state = dict(session.state_json or {})
+        vote_state = dict(state.get("vote_state") or {})
+        submitted_participant_ids = list(vote_state.get("submitted_participant_ids") or [])
+        if participant.id not in submitted_participant_ids:
+            submitted_participant_ids.append(participant.id)
+        state = record_vote_progress(state, submitted_participant_ids)
+
+        alive_participant_count = session.participants.filter(is_alive=True).count()
+        all_votes_submitted = len(submitted_participant_ids) >= alive_participant_count
+
+        participants = list(session.participants.order_by("seat_order", "joined_at"))
+        session.state_json = state
+        broadcast_reason = "vote.submitted"
+
+        if all_votes_submitted:
+            next_state, eliminated_participant, winner_alignment = resolve_voting_round(
+                session,
+                participants,
+            )
+            session.state_json = next_state
+            session.turn_number = next_state["turn_number"]
+            session.current_phase = next_state["phase"]
+            update_fields = ["state_json", "turn_number", "current_phase", "updated_at"]
+
+            if eliminated_participant is not None:
+                GameParticipant.objects.bulk_update(
+                    [participant for participant in participants if participant.id == eliminated_participant.id],
+                    ["is_alive", "eliminated_at", "last_seen_at"],
+                )
+
+            if winner_alignment:
+                session.status = GameSession.STATUS_COMPLETED
+                session.ended_at = timezone.now()
+                update_fields.extend(["status", "ended_at"])
+
+            session.save(update_fields=update_fields)
+            broadcast_reason = "vote.resolved"
+        else:
+            session.save(update_fields=["state_json", "updated_at"])
+
+        transaction.on_commit(
+            lambda session_id=session.id, reason=broadcast_reason: broadcast_session_event(
+                session_id,
+                reason,
             )
         )
 

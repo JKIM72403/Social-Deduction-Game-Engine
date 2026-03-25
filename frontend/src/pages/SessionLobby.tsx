@@ -8,24 +8,60 @@ import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useAuth } from "../contexts/AuthContext";
 import { getWebSocketSessionUrl } from "../services/api";
-import { getSessionSnapshot, setSessionReady, startSession } from "../services/sessions";
+import {
+  getSessionSnapshot,
+  setSessionReady,
+  startSession,
+  submitSessionVote,
+} from "../services/sessions";
 import type { SessionParticipant, SessionSnapshot, SessionSocketMessage } from "../types";
 
 type SocketStatus = "connecting" | "connected" | "disconnected";
 
-function getParticipantStatus(participant: SessionParticipant) {
-  if (!participant.is_connected) return { label: "Offline", color: "default" as const };
-  if (participant.is_ready) return { label: "Ready", color: "success" as const };
-  return { label: "Waiting", color: "warning" as const };
+function getParticipantStatus(
+  participant: SessionParticipant,
+  snapshot: SessionSnapshot,
+  submittedParticipantIds: number[],
+) {
+  if (snapshot.session.status === "LOBBY") {
+    if (!participant.is_connected) {
+      return { label: "Offline", color: "default" as const };
+    }
+    if (participant.is_ready) {
+      return { label: "Ready", color: "success" as const };
+    }
+    return { label: "Waiting", color: "warning" as const };
+  }
+
+  if (!participant.is_alive) {
+    return { label: "Eliminated", color: "default" as const };
+  }
+
+  if (
+    snapshot.session.current_phase === "VOTING" &&
+    submittedParticipantIds.includes(participant.id)
+  ) {
+    return { label: "Vote Locked", color: "success" as const };
+  }
+
+  if (!participant.is_connected) {
+    return { label: "Offline", color: "default" as const };
+  }
+
+  return { label: "Alive", color: "primary" as const };
 }
 
 export default function SessionLobby() {
@@ -42,6 +78,8 @@ export default function SessionLobby() {
   const [socketStatus, setSocketStatus] = useState<SocketStatus>("connecting");
   const [readySubmitting, setReadySubmitting] = useState(false);
   const [startSubmitting, setStartSubmitting] = useState(false);
+  const [voteSubmitting, setVoteSubmitting] = useState(false);
+  const [selectedVoteTargetId, setSelectedVoteTargetId] = useState<number>(0);
 
   useEffect(() => {
     if (!Number.isFinite(numericSessionId)) {
@@ -54,15 +92,18 @@ export default function SessionLobby() {
 
     getSessionSnapshot(numericSessionId)
       .then((data) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
         setSnapshot(data);
         setLoading(false);
       })
       .catch((err: any) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
         const message =
-          err?.response?.data?.error ||
-          "Unable to load this session right now.";
+          err?.response?.data?.error || "Unable to load this session right now.";
         setError(message);
         setLoading(false);
       });
@@ -106,26 +147,62 @@ export default function SessionLobby() {
     };
   }, [numericSessionId]);
 
-  const me = useMemo(
-    () => snapshot?.participants.find((participant) => participant.user_id === user?.id) ?? null,
-    [snapshot, user?.id],
-  );
-
+  const me = snapshot?.me ?? null;
   const isHost = snapshot?.session.host_user_id === user?.id;
+  const submittedParticipantIds =
+    snapshot?.state.vote_state?.submitted_participant_ids ?? [];
+  const aliveParticipants = useMemo(
+    () => snapshot?.participants.filter((participant) => participant.is_alive) ?? [],
+    [snapshot],
+  );
+  const availableVoteTargets = useMemo(() => {
+    if (!snapshot || !me) {
+      return [];
+    }
+
+    const allowedIds = new Set(me.available_vote_target_ids);
+    const preferredTargets = snapshot.participants.filter(
+      (participant) =>
+        allowedIds.has(participant.id) && participant.id !== me.participant_id,
+    );
+    if (preferredTargets.length > 0) {
+      return preferredTargets;
+    }
+
+    return snapshot.participants.filter((participant) => allowedIds.has(participant.id));
+  }, [snapshot, me]);
+
+  useEffect(() => {
+    if (availableVoteTargets.length === 0) {
+      setSelectedVoteTargetId(0);
+      return;
+    }
+
+    if (!availableVoteTargets.some((participant) => participant.id === selectedVoteTargetId)) {
+      setSelectedVoteTargetId(availableVoteTargets[0].id);
+    }
+  }, [availableVoteTargets, selectedVoteTargetId]);
 
   const handleToggleReady = async () => {
-    if (!snapshot || !me) return;
+    if (!snapshot || !me) {
+      return;
+    }
 
     setReadySubmitting(true);
     setActionError(null);
     try {
-      const updated = await setSessionReady(snapshot.session.id, !me.is_ready);
+      const updated = await setSessionReady(snapshot.session.id, !snapshot.participants.find(
+        (participant) => participant.id === me.participant_id,
+      )?.is_ready);
       setSnapshot(updated);
-      setActionNotice(!me.is_ready ? "You are marked ready." : "You are marked not ready.");
+      setActionNotice(
+        updated.participants.find((participant) => participant.id === me.participant_id)?.is_ready
+          ? "You are marked ready."
+          : "You are marked not ready.",
+      );
     } catch (err: any) {
       const message =
-        err?.response?.data?.error ||
-        "Unable to update your ready state right now.";
+        err?.response?.data?.error || "Unable to update your ready state right now.";
       setActionError(message);
     } finally {
       setReadySubmitting(false);
@@ -133,26 +210,49 @@ export default function SessionLobby() {
   };
 
   const handleStartSession = async () => {
-    if (!snapshot) return;
+    if (!snapshot) {
+      return;
+    }
 
     setStartSubmitting(true);
     setActionError(null);
     try {
       const updated = await startSession(snapshot.session.id);
       setSnapshot(updated);
-      setActionNotice("The session has started.");
+      setActionNotice("The live voting session has started.");
     } catch (err: any) {
       const message =
-        err?.response?.data?.error ||
-        "Unable to start the session right now.";
+        err?.response?.data?.error || "Unable to start the session right now.";
       setActionError(message);
     } finally {
       setStartSubmitting(false);
     }
   };
 
+  const handleSubmitVote = async () => {
+    if (!snapshot || !me || !selectedVoteTargetId) {
+      return;
+    }
+
+    setVoteSubmitting(true);
+    setActionError(null);
+    try {
+      const updated = await submitSessionVote(snapshot.session.id, selectedVoteTargetId);
+      setSnapshot(updated);
+      setActionNotice("Your vote has been locked in.");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error || "Unable to submit your vote right now.";
+      setActionError(message);
+    } finally {
+      setVoteSubmitting(false);
+    }
+  };
+
   const handleCopyJoinCode = async () => {
-    if (!snapshot) return;
+    if (!snapshot) {
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(snapshot.session.join_code);
@@ -164,7 +264,9 @@ export default function SessionLobby() {
 
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexGrow: 1 }}>
+      <Box
+        sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexGrow: 1 }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -183,8 +285,24 @@ export default function SessionLobby() {
     );
   }
 
+  const myParticipant = snapshot.participants.find(
+    (participant) => participant.id === me?.participant_id,
+  );
+  const hasSubmittedVote = Boolean(me?.has_submitted_vote);
+  const liveVoteState = snapshot.state.vote_state;
+  const lastResult = liveVoteState?.last_result;
+
   return (
-    <Box sx={{ p: 4, maxWidth: 1100, mx: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+    <Box
+      sx={{
+        p: 4,
+        maxWidth: 1180,
+        mx: "auto",
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+      }}
+    >
       <Paper sx={{ p: 3 }}>
         <Stack
           direction={{ xs: "column", md: "row" }}
@@ -204,8 +322,21 @@ export default function SessionLobby() {
             </Typography>
           </Box>
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
-            <Chip label={`Socket: ${socketStatus}`} color={socketStatus === "connected" ? "success" : socketStatus === "connecting" ? "warning" : "default"} />
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            alignItems={{ xs: "stretch", sm: "center" }}
+          >
+            <Chip
+              label={`Socket: ${socketStatus}`}
+              color={
+                socketStatus === "connected"
+                  ? "success"
+                  : socketStatus === "connecting"
+                    ? "warning"
+                    : "default"
+              }
+            />
             <Chip label={`Code: ${snapshot.session.join_code}`} color="secondary" />
             <Button variant="outlined" onClick={handleCopyJoinCode}>
               Copy Join Code
@@ -214,20 +345,32 @@ export default function SessionLobby() {
         </Stack>
       </Paper>
 
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.2fr 0.8fr" }, gap: 3 }}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", lg: "1.15fr 0.85fr" },
+          gap: 3,
+        }}
+      >
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Lobby Roster
+              Player Roster
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {snapshot.session.ready_count} of {snapshot.session.participant_count} players ready
+              {snapshot.session.status === "LOBBY"
+                ? `${snapshot.session.ready_count} of ${snapshot.session.participant_count} players ready`
+                : `${submittedParticipantIds.length} of ${aliveParticipants.length} living players have locked a vote this round`}
             </Typography>
             <Divider sx={{ mb: 2 }} />
 
             <List disablePadding>
               {snapshot.participants.map((participant) => {
-                const status = getParticipantStatus(participant);
+                const status = getParticipantStatus(
+                  participant,
+                  snapshot,
+                  submittedParticipantIds,
+                );
                 const isCurrentUser = participant.user_id === user?.id;
                 return (
                   <ListItem
@@ -247,7 +390,7 @@ export default function SessionLobby() {
                       secondary={
                         participant.role_name
                           ? `${participant.role_name}${participant.role_alignment ? ` - ${participant.role_alignment}` : ""}`
-                          : `${participant.username}${participant.is_alive ? "" : " - Eliminated"}`
+                          : `${participant.username}${participant.is_alive ? "" : " - Revealed on elimination"}`
                       }
                       primaryTypographyProps={{ fontWeight: isCurrentUser ? 700 : 500 }}
                     />
@@ -268,51 +411,6 @@ export default function SessionLobby() {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Your Controls
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Ready up while the lobby is open. Once everyone is set, the host can start the session.
-              </Typography>
-
-              <Stack spacing={1.5}>
-                <Button
-                  variant={me?.is_ready ? "outlined" : "contained"}
-                  color={me?.is_ready ? "warning" : "success"}
-                  onClick={handleToggleReady}
-                  disabled={!me || snapshot.session.status !== "LOBBY" || readySubmitting}
-                >
-                  {readySubmitting
-                    ? "Saving..."
-                    : me?.is_ready
-                      ? "Mark Not Ready"
-                      : "Mark Ready"}
-                </Button>
-
-                {isHost && (
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    onClick={handleStartSession}
-                    disabled={
-                      snapshot.session.status !== "LOBBY" ||
-                      !snapshot.session.all_ready ||
-                      startSubmitting
-                    }
-                  >
-                    {startSubmitting ? "Starting..." : "Start Session"}
-                  </Button>
-                )}
-
-                <Button variant="text" onClick={() => navigate("/multiplayer")}>
-                  Join Another Lobby
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
                 Session Status
               </Typography>
               <Stack spacing={1}>
@@ -323,66 +421,187 @@ export default function SessionLobby() {
                   Turn: {snapshot.session.turn_number}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Status: {snapshot.session.status}
+                  Runtime: {snapshot.state.mode || "Lobby"}
                 </Typography>
               </Stack>
+
+              {snapshot.session.status !== "LOBBY" && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  This multiplayer MVP is running server-authoritative live voting rounds. Every client view is refreshed from the same session snapshot.
+                </Alert>
+              )}
             </CardContent>
           </Card>
 
-          {snapshot.state.phase && (
+          {me && (
             <Card>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
-                  Live Game Snapshot
+                  You
+                </Typography>
+                <Stack spacing={1}>
+                  <Typography variant="body2">{me.display_name}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Role: {me.role_name || "Hidden until the session starts"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Alignment: {me.role_alignment || "Hidden until the session starts"}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color={me.is_alive ? "success.main" : "error.main"}
+                    fontWeight={600}
+                  >
+                    {me.is_alive ? "Alive" : "Eliminated"}
+                  </Typography>
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
+
+          {snapshot.session.status === "LOBBY" ? (
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Lobby Controls
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Ready up while the lobby is open. Once everyone is set, the host can launch the live session.
+                </Typography>
+
+                <Stack spacing={1.5}>
+                  <Button
+                    variant={myParticipant?.is_ready ? "outlined" : "contained"}
+                    color={myParticipant?.is_ready ? "warning" : "success"}
+                    onClick={handleToggleReady}
+                    disabled={!myParticipant || readySubmitting}
+                  >
+                    {readySubmitting
+                      ? "Saving..."
+                      : myParticipant?.is_ready
+                        ? "Mark Not Ready"
+                        : "Mark Ready"}
+                  </Button>
+
+                  {isHost && (
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      onClick={handleStartSession}
+                      disabled={!snapshot.session.all_ready || startSubmitting}
+                    >
+                      {startSubmitting ? "Starting..." : "Start Session"}
+                    </Button>
+                  )}
+
+                  <Button variant="text" onClick={() => navigate("/multiplayer")}>
+                    Join Another Lobby
+                  </Button>
+                </Stack>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Vote Panel
+                </Typography>
+                {!me?.is_alive ? (
+                  <Typography variant="body2" color="text.secondary">
+                    You have been eliminated, so this round is view-only from here.
+                  </Typography>
+                ) : snapshot.session.current_phase === "GAME_OVER" ? (
+                  <Typography variant="body2" color="text.secondary">
+                    The session is over. Review the latest result and event log below.
+                  </Typography>
+                ) : hasSubmittedVote ? (
+                  <Alert severity="success">
+                    Your vote is locked in. Waiting for the rest of the living players to finish this round.
+                  </Alert>
+                ) : (
+                  <Stack spacing={2}>
+                    <Typography variant="body2" color="text.secondary">
+                      Pick one living player. The server resolves the round as soon as every living participant has submitted a vote.
+                    </Typography>
+                    <FormControl fullWidth>
+                      <InputLabel id="vote-target-label">Vote Target</InputLabel>
+                      <Select
+                        labelId="vote-target-label"
+                        value={selectedVoteTargetId || ""}
+                        label="Vote Target"
+                        onChange={(event) => setSelectedVoteTargetId(Number(event.target.value))}
+                        disabled={voteSubmitting || availableVoteTargets.length === 0}
+                      >
+                        {availableVoteTargets.map((participant) => (
+                          <MenuItem key={participant.id} value={participant.id}>
+                            {participant.display_name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      onClick={handleSubmitVote}
+                      disabled={
+                        voteSubmitting ||
+                        availableVoteTargets.length === 0 ||
+                        !selectedVoteTargetId
+                      }
+                    >
+                      {voteSubmitting ? "Submitting..." : "Lock In Vote"}
+                    </Button>
+                  </Stack>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {lastResult && (
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Last Resolution
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  The game has started. This panel reflects the server-authoritative snapshot coming over the session websocket.
+                  {lastResult.outcome_message}
                 </Typography>
-
-                <Stack spacing={1} sx={{ mb: 2 }}>
-                  <Typography variant="body2">Current Phase: {snapshot.state.phase}</Typography>
-                  <Typography variant="body2">Turn Number: {snapshot.state.turn_number ?? snapshot.session.turn_number}</Typography>
-                </Stack>
-
-                {snapshot.state.players && snapshot.state.players.length > 0 && (
-                  <>
-                    <Divider sx={{ mb: 2 }} />
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Active Players
-                    </Typography>
-                    <List disablePadding>
-                      {snapshot.state.players.map((player) => (
-                        <ListItem key={player.display_name} disablePadding sx={{ py: 0.5 }}>
-                          <ListItemText
-                            primary={player.display_name}
-                            secondary={player.is_alive ? "Alive" : "Eliminated"}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </>
-                )}
-
-                {snapshot.state.events && snapshot.state.events.length > 0 && (
-                  <>
-                    <Divider sx={{ my: 2 }} />
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Event Log
-                    </Typography>
-                    <List disablePadding>
-                      {snapshot.state.events.slice(-6).map((event) => (
-                        <ListItem key={event} disablePadding sx={{ py: 0.5 }}>
-                          <ListItemText primary={event} primaryTypographyProps={{ variant: "body2" }} />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </>
-                )}
+                <List disablePadding>
+                  {lastResult.vote_counts.map((entry) => (
+                    <ListItem key={entry.target_participant_id} disablePadding sx={{ py: 0.5 }}>
+                      <ListItemText
+                        primary={entry.target_display_name}
+                        secondary={`${entry.count} vote${entry.count === 1 ? "" : "s"}`}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
               </CardContent>
             </Card>
           )}
         </Stack>
       </Box>
+
+      {snapshot.state.events && snapshot.state.events.length > 0 && (
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Event Log
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Recent server events for this live session.
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            <List disablePadding>
+              {snapshot.state.events.slice(-10).map((event) => (
+                <ListItem key={event} disablePadding sx={{ py: 0.5 }}>
+                  <ListItemText primary={event} primaryTypographyProps={{ variant: "body2" }} />
+                </ListItem>
+              ))}
+            </List>
+          </CardContent>
+        </Card>
+      )}
 
       <Snackbar
         open={Boolean(actionError || actionNotice)}

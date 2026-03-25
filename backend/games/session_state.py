@@ -1,6 +1,7 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
+from .models import GameAction
 from .models import GameSession
 
 
@@ -25,8 +26,26 @@ def build_session_snapshot(session: GameSession, viewer_user_id: int | None = No
     participants = list(
         session.participants.select_related("user").order_by("seat_order", "joined_at")
     )
+    viewer_participant = next(
+        (participant for participant in participants if participant.user_id == viewer_user_id),
+        None,
+    )
     ready_count = sum(1 for participant in participants if participant.is_ready)
     participant_count = len(participants)
+    viewer_pending_vote = None
+
+    if viewer_participant and session.current_phase == GameSession.PHASE_VOTING:
+        viewer_pending_vote = (
+            session.actions.filter(
+                participant=viewer_participant,
+                phase=GameSession.PHASE_VOTING,
+                action_type="VOTE",
+                status=GameAction.STATUS_SUBMITTED,
+                turn_number=session.turn_number,
+            )
+            .values("payload")
+            .first()
+        )
 
     return {
         "session": {
@@ -68,6 +87,7 @@ def build_session_snapshot(session: GameSession, viewer_user_id: int | None = No
             }
             for participant in participants
         ],
+        "me": _build_viewer_state(session, viewer_participant, viewer_pending_vote),
         "state": session.state_json,
     }
 
@@ -109,3 +129,38 @@ def _can_view_role(session: GameSession, participant, viewer_user_id: int | None
         return True
 
     return False
+
+
+def _build_viewer_state(session: GameSession, viewer_participant, viewer_pending_vote):
+    if viewer_participant is None:
+        return None
+
+    has_submitted_vote = False
+    current_vote_target_id = None
+    if viewer_pending_vote:
+        payload = viewer_pending_vote.get("payload") or {}
+        current_vote_target_id = payload.get("target_participant_id")
+        has_submitted_vote = current_vote_target_id is not None
+
+    available_vote_target_ids = []
+    if (
+        session.status == GameSession.STATUS_IN_PROGRESS
+        and session.current_phase == GameSession.PHASE_VOTING
+        and viewer_participant.is_alive
+    ):
+        available_vote_target_ids = [
+            participant.id
+            for participant in session.participants.all().order_by("seat_order", "joined_at")
+            if participant.is_alive
+        ]
+
+    return {
+        "participant_id": viewer_participant.id,
+        "display_name": viewer_participant.display_name,
+        "is_alive": viewer_participant.is_alive,
+        "role_name": viewer_participant.role_name,
+        "role_alignment": viewer_participant.role_alignment,
+        "has_submitted_vote": has_submitted_vote,
+        "current_vote_target_id": current_vote_target_id,
+        "available_vote_target_ids": available_vote_target_ids,
+    }

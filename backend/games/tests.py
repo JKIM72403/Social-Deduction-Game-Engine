@@ -82,12 +82,14 @@ class GameSessionModelTests(TestCase):
         action = GameAction.objects.create(
             session=session,
             participant=participant,
+            turn_number=1,
             phase=GameSession.PHASE_VOTING,
             action_type="VOTE",
             payload={"target": "Player B"},
         )
 
         self.assertEqual(action.status, GameAction.STATUS_SUBMITTED)
+        self.assertEqual(action.turn_number, 1)
         self.assertEqual(action.payload["target"], "Player B")
 
 
@@ -158,8 +160,9 @@ class NetworkSessionApiTests(TestCase):
 
         self.assertEqual(start_response.status_code, 200)
         self.assertEqual(start_response.data["session"]["status"], GameSession.STATUS_IN_PROGRESS)
-        self.assertEqual(start_response.data["session"]["current_phase"], "NIGHT")
-        self.assertEqual(start_response.data["state"]["phase"], "NIGHT")
+        self.assertEqual(start_response.data["session"]["current_phase"], "VOTING")
+        self.assertEqual(start_response.data["state"]["phase"], "VOTING")
+        self.assertEqual(start_response.data["state"]["vote_state"]["votes_needed"], 2)
 
         host_snapshot = self.host_client.get(f"/api/sessions/{session_id}/snapshot/")
         guest_snapshot = self.guest_client.get(f"/api/sessions/{session_id}/snapshot/")
@@ -180,6 +183,76 @@ class NetworkSessionApiTests(TestCase):
         self.assertEqual(host_participants["api_guest"]["role_name"], "")
         self.assertTrue(guest_participants["api_guest"]["role_name"])
         self.assertEqual(guest_participants["api_host"]["role_name"], "")
+        self.assertFalse(host_snapshot.data["me"]["has_submitted_vote"])
+
+    def test_vote_submission_and_resolution_updates_session_authoritatively(self):
+        create_response = self.host_client.post(
+            "/api/sessions/",
+            {"template_id": self.template.id, "display_name": "Captain Host"},
+            format="json",
+        )
+        session_id = create_response.data["session"]["id"]
+        join_code = create_response.data["session"]["join_code"]
+
+        self.guest_client.post(
+            "/api/sessions/join/",
+            {"join_code": join_code, "display_name": "Guest Scout"},
+            format="json",
+        )
+        self.host_client.post(
+            f"/api/sessions/{session_id}/ready/",
+            {"is_ready": True},
+            format="json",
+        )
+        self.guest_client.post(
+            f"/api/sessions/{session_id}/ready/",
+            {"is_ready": True},
+            format="json",
+        )
+        self.host_client.post(f"/api/sessions/{session_id}/start/", {}, format="json")
+
+        session = GameSession.objects.get(id=session_id)
+        participants = list(session.participants.select_related("user").order_by("seat_order", "joined_at"))
+        mafia_participant = next(
+            participant for participant in participants if participant.role_alignment == "MAFIA"
+        )
+        town_participant = next(
+            participant for participant in participants if participant.role_alignment == "TOWN"
+        )
+
+        first_client = self.host_client if town_participant.user_id == self.host.id else self.guest_client
+        second_client = self.host_client if mafia_participant.user_id == self.host.id else self.guest_client
+
+        first_vote = first_client.post(
+            f"/api/sessions/{session_id}/actions/",
+            {"action_type": "VOTE", "target_participant_id": mafia_participant.id},
+            format="json",
+        )
+        self.assertEqual(first_vote.status_code, 200)
+        self.assertEqual(first_vote.data["state"]["vote_state"]["submitted_count"], 1)
+        self.assertEqual(first_vote.data["session"]["current_phase"], GameSession.PHASE_VOTING)
+
+        second_vote = second_client.post(
+            f"/api/sessions/{session_id}/actions/",
+            {"action_type": "VOTE", "target_participant_id": mafia_participant.id},
+            format="json",
+        )
+        self.assertEqual(second_vote.status_code, 200)
+        self.assertEqual(second_vote.data["session"]["status"], GameSession.STATUS_COMPLETED)
+        self.assertEqual(second_vote.data["session"]["current_phase"], GameSession.PHASE_GAME_OVER)
+        self.assertEqual(
+            second_vote.data["state"]["vote_state"]["last_result"]["eliminated_participant_id"],
+            mafia_participant.id,
+        )
+
+        session.refresh_from_db()
+        mafia_participant.refresh_from_db()
+        self.assertEqual(session.status, GameSession.STATUS_COMPLETED)
+        self.assertFalse(mafia_participant.is_alive)
+        self.assertEqual(
+            GameAction.objects.filter(session=session, status=GameAction.STATUS_APPLIED).count(),
+            2,
+        )
 
     def _build_template(self, creator):
         template = GameTemplate.objects.create(
@@ -223,6 +296,18 @@ class GameSessionWebSocketTests(TransactionTestCase):
             max_players=8,
             creator=self.host,
         )
+        town_role = RoleTemplate.objects.create(
+            name="Socket Villager",
+            alignment="TOWN",
+            description="Basic town role",
+        )
+        mafia_role = RoleTemplate.objects.create(
+            name="Socket Mafioso",
+            alignment="MAFIA",
+            description="Basic mafia role",
+        )
+        GameRoleSlot.objects.create(game_template=self.template, role=town_role, count=1)
+        GameRoleSlot.objects.create(game_template=self.template, role=mafia_role, count=1)
         self.session = GameSession.objects.create(
             template=self.template,
             host=self.host,
@@ -324,6 +409,89 @@ class GameSessionWebSocketTests(TransactionTestCase):
                 if participant["username"] == "socket_guest"
             )
             self.assertTrue(guest_entry["is_ready"])
+
+            await communicator.disconnect()
+
+        async_to_sync(run_test)()
+
+    def test_vote_submission_broadcasts_live_progress(self):
+        async def run_test():
+            host_client = APIClient()
+            host_client.force_authenticate(user=self.host)
+
+            create_response = await sync_to_async(
+                host_client.post,
+                thread_sensitive=True,
+            )(
+                "/api/sessions/",
+                {"template_id": self.template.id, "display_name": "socket_host"},
+                format="json",
+            )
+            self.assertEqual(create_response.status_code, 201)
+
+            join_response = await sync_to_async(
+                self.guest_client.post,
+                thread_sensitive=True,
+            )(
+                "/api/sessions/join/",
+                {"join_code": create_response.data["session"]["join_code"], "display_name": "socket_guest"},
+                format="json",
+            )
+            session_id = join_response.data["session"]["id"]
+
+            await sync_to_async(host_client.post, thread_sensitive=True)(
+                f"/api/sessions/{session_id}/ready/",
+                {"is_ready": True},
+                format="json",
+            )
+            await sync_to_async(self.guest_client.post, thread_sensitive=True)(
+                f"/api/sessions/{session_id}/ready/",
+                {"is_ready": True},
+                format="json",
+            )
+            await sync_to_async(host_client.post, thread_sensitive=True)(
+                f"/api/sessions/{session_id}/start/",
+                {},
+                format="json",
+            )
+
+            communicator = WebsocketCommunicator(
+                application,
+                f"/ws/sessions/{session_id}/?token={self.host_token.key}",
+            )
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+
+            initial_payload = await communicator.receive_json_from()
+            self.assertEqual(initial_payload["type"], "session.snapshot")
+
+            await communicator.receive_json_from()
+
+            fresh_session = await sync_to_async(GameSession.objects.get, thread_sensitive=True)(id=session_id)
+            participants = await sync_to_async(
+                lambda: list(fresh_session.participants.order_by("seat_order", "joined_at")),
+                thread_sensitive=True,
+            )()
+            guest_participant = next(
+                participant for participant in participants if participant.user_id == self.guest.id
+            )
+
+            response = await sync_to_async(
+                self.guest_client.post,
+                thread_sensitive=True,
+            )(
+                f"/api/sessions/{session_id}/actions/",
+                {"action_type": "VOTE", "target_participant_id": guest_participant.id},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200)
+
+            broadcast_payload = await communicator.receive_json_from()
+            self.assertEqual(broadcast_payload["reason"], "vote.submitted")
+            self.assertEqual(
+                broadcast_payload["snapshot"]["state"]["vote_state"]["submitted_count"],
+                1,
+            )
 
             await communicator.disconnect()
 

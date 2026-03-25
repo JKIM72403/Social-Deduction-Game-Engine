@@ -79,20 +79,54 @@ export type SessionParticipant = {
 };
 
 export type SessionState = {
+    mode?: string;
     phase?: string;
     turn_number?: number;
     phase_index?: number;
     phase_order?: Array<{ name: string; type: string }>;
     events?: string[];
     players?: Array<{
+        participant_id: number;
         display_name: string;
         is_alive: boolean;
     }>;
+    vote_state?: {
+        status?: "OPEN" | "RESOLVED";
+        required_participant_ids?: number[];
+        submitted_participant_ids?: number[];
+        submitted_count?: number;
+        votes_needed?: number;
+        last_result?: {
+            turn_number: number;
+            resolved_at: string;
+            eliminated_participant_id: number | null;
+            eliminated_display_name: string;
+            majority_threshold: number;
+            outcome_message: string;
+            vote_counts: Array<{
+                target_participant_id: number;
+                target_display_name: string;
+                count: number;
+            }>;
+        } | null;
+    };
+};
+
+export type SessionViewer = {
+    participant_id: number;
+    display_name: string;
+    is_alive: boolean;
+    role_name: string;
+    role_alignment: string;
+    has_submitted_vote: boolean;
+    current_vote_target_id: number | null;
+    available_vote_target_ids: number[];
 };
 
 export type SessionSnapshot = {
     session: SessionSummary;
     participants: SessionParticipant[];
+    me: SessionViewer | null;
     state: SessionState;
 };
 

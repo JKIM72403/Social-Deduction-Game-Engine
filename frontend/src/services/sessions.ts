@@ -33,3 +33,11 @@ export async function startSession(sessionId: number) {
   const response = await API.post<SessionSnapshot>(`/sessions/${sessionId}/start/`, {});
   return response.data;
 }
+
+export async function submitSessionVote(sessionId: number, targetParticipantId: number) {
+  const response = await API.post<SessionSnapshot>(`/sessions/${sessionId}/actions/`, {
+    action_type: "VOTE",
+    target_participant_id: targetParticipantId,
+  });
+  return response.data;
+}

@@ -263,3 +263,8 @@ class JoinSessionSerializer(serializers.Serializer):
 
 class SessionReadySerializer(serializers.Serializer):
     is_ready = serializers.BooleanField(required=False)
+
+
+class SubmitSessionActionSerializer(serializers.Serializer):
+    action_type = serializers.ChoiceField(choices=["VOTE"])
+    target_participant_id = serializers.IntegerField()

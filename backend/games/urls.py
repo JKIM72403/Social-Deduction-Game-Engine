@@ -5,6 +5,7 @@ from .views import (
     PhaseTemplateViewSet, WinConditionTemplateViewSet,
     create_network_session, join_network_session,
     network_session_snapshot, set_network_session_ready, start_network_session,
+    submit_network_session_action,
     start_game_session, game_session_action,
     signup_view, login_view, me_view,
 )
@@ -23,6 +24,7 @@ urlpatterns = [
     path('sessions/<int:session_id>/snapshot/', network_session_snapshot, name='network_session_snapshot'),
     path('sessions/<int:session_id>/ready/', set_network_session_ready, name='set_network_session_ready'),
     path('sessions/<int:session_id>/start/', start_network_session, name='start_network_session'),
+    path('sessions/<int:session_id>/actions/', submit_network_session_action, name='submit_network_session_action'),
     path('game-sessions/', start_game_session, name='start_game_session'),
     path('game-sessions/<str:session_id>/act/', game_session_action, name='game_session_action'),
     path('auth/signup/', signup_view, name='signup'),
