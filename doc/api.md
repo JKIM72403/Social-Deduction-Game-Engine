@@ -53,10 +53,74 @@ Leave a lobby.
 
 ## WebSocket Events
 
-[To be documented when implemented]
+### Connection
 
-- lobby:player_joined
-- lobby:player_left
-- game:phase_change
-- game:vote_cast
-- game:action_performed
+**URL:** `ws://localhost:8000/ws/session/{session_id}/`
+
+**Authentication:** Token-based via query parameter or cookies. The user must be either the host or a participant in the session.
+
+**Connection Flow:**
+1. Client connects to WebSocket endpoint
+2. Server validates authentication and session access
+3. Server sends initial `session.snapshot` with full game state
+4. Server broadcasts `session.event` to all connected clients
+
+### Client → Server Events
+
+#### ping
+Keep-alive heartbeat.
+```json
+{
+  "type": "ping"
+}
+```
+Response:
+```json
+{
+  "type": "pong"
+}
+```
+
+#### session.request_snapshot
+Request current game state snapshot.
+```json
+{
+  "type": "session.request_snapshot"
+}
+```
+Response: `session.snapshot` event
+
+### Server → Client Events
+
+#### session.snapshot
+Full game state update.
+```json
+{
+  "type": "session.snapshot",
+  "reason": "connection.accepted" | "manual_refresh" | "participant.connected" | "participant.disconnected" | "game_action",
+  "snapshot": {
+    "id": 1,
+    "host": {...},
+    "template": {...},
+    "participants": [...],
+    "state_json": {...},
+    "current_phase": "NIGHT",
+    "game_started": true,
+    "game_over": false
+  }
+}
+```
+
+#### error
+Error message for invalid requests.
+```json
+{
+  "type": "error",
+  "message": "Error description"
+}
+```
+
+### Connection Close Codes
+
+- `4401`: Unauthorized (not authenticated)
+- `4404`: Not Found (session doesn't exist or user has no access)

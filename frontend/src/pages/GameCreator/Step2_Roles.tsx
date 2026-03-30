@@ -9,9 +9,10 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import { API } from "../../services/api";
 import type { GameData } from "../types";
 import RoleEditor from "../../components/RoleEditor";
+import { COLORS } from '../../constants/colors';
 
 const selectedChipSx = {
-    borderColor: '#22c55e',
+    borderColor: COLORS.BORDER_HIGHLIGHT,
     borderWidth: 2,
     backgroundColor: 'rgba(34, 197, 94, 0.08)',
     '&:hover': {
@@ -20,7 +21,7 @@ const selectedChipSx = {
 };
 
 const unselectedChipSx = {
-    borderColor: '#334155',
+    borderColor: COLORS.BORDER_DEFAULT,
     borderWidth: 1,
     '&:hover': {
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -200,12 +201,12 @@ export default function Step2_Roles({ data, update, onNext, onBack }: Props) {
                         </Box>
                     )}
                     {totalRoles < data.min_players && (
-                        <Typography variant="body2" sx={{ color: '#dc3545', mt: 1 }}>
+                        <Typography variant="body2" sx={{ color: COLORS.ERROR, mt: 1 }}>
                             Need at least {data.min_players} roles.
                         </Typography>
                     )}
                     {totalRoles > data.max_players && (
-                        <Typography variant="body2" sx={{ color: '#dc3545', mt: 1 }}>
+                        <Typography variant="body2" sx={{ color: COLORS.ERROR, mt: 1 }}>
                             Too many roles (max {data.max_players}).
                         </Typography>
                     )}

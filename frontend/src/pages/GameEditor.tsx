@@ -12,9 +12,25 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Sidebar from '../components/sidebar';
 import EditPanel from '../components/edit-panel';
 import { API } from '../services/api';
-import type { GameData, Phase, WinCondition, RoleSlot } from '../types';
+import type { GameData, Phase, WinCondition, RoleSlot, RoleTemplate } from '../types';
 import type { Selection } from '../components/edit-panel';
 import { useNavigate, useParams } from 'react-router-dom';
+import { COLORS } from '../constants/colors';
+
+type GameTemplateAPIResponse = {
+    id: number;
+    name: string;
+    min_players: number;
+    max_players: number;
+    is_public: boolean;
+    role_slots: Array<{
+        role: number;
+        count: number;
+        role_details?: RoleTemplate;
+    }>;
+    phases: Phase[];
+    win_conditions: WinCondition[];
+};
 
 type GameValidationState = {
     errors: string[];
@@ -128,9 +144,9 @@ const GameEditor = () => {
         if (id) {
             API.get(`/game-templates/${id}/`)
                 .then(res => {
-                    const data = res.data;
+                    const data = res.data as GameTemplateAPIResponse;
                     // Transform API response to internal GameData format
-                    const role_slots = data.role_slots.map((s: any) => ({
+                    const role_slots = data.role_slots.map((s) => ({
                         roleId: s.role,
                         roleName: s.role_details ? s.role_details.name : "Unknown Role",
                         count: s.count
@@ -158,7 +174,7 @@ const GameEditor = () => {
         setGameData(prev => ({ ...prev, ...data }));
     };
 
-    const handleRoleSaved = (role: any) => {
+    const handleRoleSaved = (role: RoleTemplate) => {
         setGameData(prev => {
             const existingSlotIndex = prev.role_slots.findIndex(s => s.roleId === role.id);
             if (existingSlotIndex >= 0) {
@@ -293,14 +309,14 @@ const GameEditor = () => {
             }
 
             // Sync state with backend response (includes generated IDs and defaults)
-            const data = res.data;
+            const data = res.data as GameTemplateAPIResponse;
             setGameData({
                 id: data.id,
                 name: data.name,
                 min_players: data.min_players,
                 max_players: data.max_players,
                 is_public: data.is_public !== undefined ? data.is_public : true,
-                role_slots: data.role_slots.map((s: any) => ({
+                role_slots: data.role_slots.map((s) => ({
                     roleId: s.role,
                     roleName: s.role_details?.name || 'Unknown',
                     count: s.count
@@ -309,13 +325,19 @@ const GameEditor = () => {
                 win_conditions: data.win_conditions || []
             });
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(e);
             let errMsg = "Failed to save game.";
-            if (e.response?.data) {
-                if (typeof e.response.data === 'string') errMsg = e.response.data;
-                else if (e.response.data.detail) errMsg = e.response.data.detail;
-                else errMsg = JSON.stringify(e.response.data);
+            if (typeof e === 'object' && e !== null && 'response' in e) {
+                const err = e as { response?: { data?: unknown } };
+                if (err.response?.data) {
+                    if (typeof err.response.data === 'string') errMsg = err.response.data;
+                    else if (typeof err.response.data === 'object' && 'detail' in err.response.data) {
+                        errMsg = String(err.response.data.detail);
+                    } else {
+                        errMsg = JSON.stringify(err.response.data);
+                    }
+                }
             }
             setSnackbar({ open: true, message: errMsg, severity: 'error' });
         }
@@ -376,7 +398,7 @@ const GameEditor = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     position: 'relative',
-                    background: 'radial-gradient(circle at center, #1e293b 0%, #0f172a 100%)',
+                    background: `radial-gradient(circle at center, ${COLORS.BG_DARK_SECONDARY} 0%, ${COLORS.BG_DARK_PRIMARY} 100%)`,
                     flexDirection: 'column',
                     gap: 2
                 }}>

@@ -11,17 +11,18 @@ import Chip from '@mui/material/Chip';
 import Popover from '@mui/material/Popover';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { API } from "../services/api";
-import type { AbilityTemplate } from "../types";
+import type { AbilityTemplate, RoleTemplate } from "../types";
+import { COLORS } from '../constants/colors';
 
 
 interface Props {
     roleId?: number;
-    onSave: (role: any) => void;
+    onSave: (role: RoleTemplate) => void;
     onCancel: () => void;
 }
 
 const selectedChipSx = {
-    borderColor: '#22c55e',
+    borderColor: COLORS.BORDER_HIGHLIGHT,
     borderWidth: 2,
     backgroundColor: 'rgba(34, 197, 94, 0.08)',
     '&:hover': {
@@ -30,7 +31,7 @@ const selectedChipSx = {
 };
 
 const unselectedChipSx = {
-    borderColor: '#334155',
+    borderColor: COLORS.BORDER_DEFAULT,
     borderWidth: 1,
     '&:hover': {
         backgroundColor: 'rgba(255, 255, 255, 0.05)',

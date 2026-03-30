@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
+import logging
 import random
 from typing import List, Dict, Optional, Type
+
+logger = logging.getLogger(__name__)
 
 # --- Enums ---
 
@@ -438,7 +441,7 @@ class GameEngine:
             "visible_to": visible_to,
         }
         self.events.append(event)
-        print(f"[Turn {self.turn_number}] [{event_type}] {message}")
+        logger.info(f"[Turn {self.turn_number}] [{event_type}] {message}")
 
     def start_game(self):
         self.turn_number = 1

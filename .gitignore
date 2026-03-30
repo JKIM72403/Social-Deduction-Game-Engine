@@ -38,3 +38,8 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Debug output files
+out.txt
+error.html
+backend/test_*.py  # ad-hoc test scripts (not the tests.py suite)

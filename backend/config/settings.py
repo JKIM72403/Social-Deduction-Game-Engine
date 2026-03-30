@@ -105,6 +105,22 @@ DATABASES = {
     }
 }
 
+# WebSocket channel layers configuration
+# WARNING: InMemoryChannelLayer is for development only!
+# For production deployment with multiple workers, use Redis:
+#
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             'hosts': [os.getenv('REDIS_URL', 'redis://localhost:6379')],
+#         },
+#     },
+# }
+#
+# Install: pip install channels-redis
+# See: https://channels.readthedocs.io/en/stable/topics/channel_layers.html
+
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',

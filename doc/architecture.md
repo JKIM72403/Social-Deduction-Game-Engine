@@ -13,8 +13,8 @@ Web application (browser-based for both hosts and players)
 +------------------+         +--------+---------+
                                       |
                              +--------v---------+
-                             |    MongoDB       |
-                             |                  |
+                             |    SQLite DB     |
+                             |  (Django ORM)    |
                              +------------------+
 
 ## Frontend Responsibilities
@@ -41,8 +41,26 @@ Web application (browser-based for both hosts and players)
 | Lobby updates | WebSockets |
 | Gameplay events | WebSockets |
 
+## Game Modes
+
+The engine supports two distinct gameplay modes:
+
+### Solo Mode (Demo Sessions)
+- **Purpose:** Single-player practice with AI bots
+- **Storage:** In-memory (ephemeral, not persisted)
+- **API Endpoints:** `/api/game-sessions/`
+- **Limitations:** Games lost on server restart
+- **Use Case:** Testing game configurations, learning roles
+
+### Multiplayer Mode (Network Sessions)
+- **Purpose:** Real-time multiplayer with human players
+- **Storage:** Database-persisted (GameSession.state_json)
+- **API Endpoints:** `/api/sessions/`
+- **Real-time:** WebSocket connections for live gameplay
+- **Use Case:** Actual gameplay with friends
+
 ## Deployment
 
 - Frontend: TBD (AWS Amplify, Vercel, etc.)
 - Backend: TBD (AWS EC2, Heroku, etc.)
-- Database: MongoDB Atlas
+- Database: SQLite (development), PostgreSQL recommended for production

@@ -6,6 +6,7 @@ import {
     Paper, List, ListItem, ListItemText, CircularProgress, Divider, Alert, Snackbar
 } from "@mui/material";
 import { formatLogMessage } from "../utils";
+import { COLORS } from '../constants/colors';
 
 type Player = {
     name: string;
@@ -99,22 +100,22 @@ function getPhaseGuidance(gameState: GameState) {
 function getLogStyle(type: LogEvent["type"]): { color: string; fontStyle?: string; fontWeight?: number; fontSize?: string; prefix: string } {
     switch (type) {
         case "phase_change":
-            return { color: "#94a3b8", fontStyle: "italic", prefix: "---" };
+            return { color: COLORS.LOG_SYSTEM, fontStyle: "italic", prefix: "---" };
         case "kill":
-            return { color: "#ef4444", fontWeight: 600, prefix: "[KILL]" };
+            return { color: COLORS.LOG_KILL, fontWeight: 600, prefix: "[KILL]" };
         case "protect":
-            return { color: "#22c55e", prefix: "[SAVE]" };
+            return { color: COLORS.LOG_PROTECT, prefix: "[SAVE]" };
         case "investigate":
-            return { color: "#06b6d4", prefix: "[INFO]" };
+            return { color: COLORS.LOG_INVESTIGATE, prefix: "[INFO]" };
         case "vote":
-            return { color: "#f59e0b", prefix: "[VOTE]" };
+            return { color: COLORS.LOG_VOTE, prefix: "[VOTE]" };
         case "ability":
-            return { color: "#8b5cf6", prefix: "[ACT]" };
+            return { color: COLORS.LOG_ABILITY, prefix: "[ACT]" };
         case "win":
-            return { color: "#fbbf24", fontWeight: 700, fontSize: "1.1rem", prefix: "[WIN]" };
+            return { color: COLORS.LOG_WIN, fontWeight: 700, fontSize: "1.1rem", prefix: "[WIN]" };
         case "system":
         default:
-            return { color: "#64748b", fontSize: "0.85rem", prefix: "" };
+            return { color: COLORS.LOG_INFO, fontSize: "0.85rem", prefix: "" };
     }
 }
 
@@ -268,9 +269,9 @@ export default function PlayGame() {
                                 if (log.type === "phase_change") {
                                     return (
                                         <Box key={index} sx={{ my: 1.5 }}>
-                                            <Divider sx={{ '&::before, &::after': { borderColor: '#475569' } }}>
+                                            <Divider sx={{ '&::before, &::after': { borderColor: COLORS.DIVIDER } }}>
                                                 <Typography variant="caption" sx={{
-                                                    color: '#94a3b8',
+                                                    color: COLORS.LOG_SYSTEM,
                                                     fontWeight: 600,
                                                     letterSpacing: 1,
                                                     textTransform: 'uppercase',

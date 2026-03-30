@@ -1,3 +1,4 @@
+import logging
 import random
 import uuid
 
@@ -494,6 +495,10 @@ def submit_network_session_action(request, session_id):
 # --- Existing Single-Player Demo Session Views ---
 
 # In-memory store for active demo game sessions
+# NOTE: State is NOT persisted - games will be lost on server restart
+# This is acceptable for the solo/demo mode but would need Redis/database
+# persistence for production deployment with multiple server instances.
+# For the multiplayer mode, state IS persisted in GameSession.state_json.
 ACTIVE_GAMES = {}
 
 
@@ -585,8 +590,10 @@ def _get_bot_target(bot, engine, available_players, ability=None, is_vote=False)
                             known_mafia.add(target_name)
                         elif alignment_str == "TOWN":
                             known_town.add(target_name)
-                    except Exception:
-                        pass
+                    except (IndexError, ValueError, AttributeError) as e:
+                        # Failed to parse investigation result from log message
+                        # This is not critical - bot will just lack this intel
+                        logging.getLogger(__name__).debug(f"Bot intel parsing failed: {e}")
     
     alive_targets = [p for p in available_players if p.name != bot.name]
     if not alive_targets:

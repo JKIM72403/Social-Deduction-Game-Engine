@@ -7,9 +7,10 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import { API } from "../services/api";
 import type { RoleTemplate, RoleSlot } from "../types";
+import { COLORS } from '../constants/colors';
 
 const selectedChipSx = {
-    borderColor: '#22c55e',
+    borderColor: COLORS.BORDER_HIGHLIGHT,
     borderWidth: 2,
     backgroundColor: 'rgba(34, 197, 94, 0.08)',
     '&:hover': {
@@ -18,7 +19,7 @@ const selectedChipSx = {
 };
 
 const unselectedChipSx = {
-    borderColor: '#334155',
+    borderColor: COLORS.BORDER_DEFAULT,
     borderWidth: 1,
     '&:hover': {
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -27,15 +28,15 @@ const unselectedChipSx = {
 
 const alignmentColors = {
     TOWN: {
-        color: '#3b82f6',
+        color: COLORS.BORDER_BLUE,
         bgColor: 'rgba(59, 130, 246, 0.1)',
     },
     MAFIA: {
-        color: '#ef4444',
+        color: COLORS.MAFIA,
         bgColor: 'rgba(239, 68, 68, 0.1)',
     },
     NEUTRAL: {
-        color: '#eab308',
+        color: COLORS.NEUTRAL,
         bgColor: 'rgba(234, 179, 8, 0.1)',
     },
 };
@@ -54,12 +55,13 @@ export default function RoleSelector({ existingSlots, onSelectRole, onCreateCust
 
     useEffect(() => {
         API.get("/roles/")
-            .then((res: any) => {
+            .then((res: { data: RoleTemplate[] }) => {
                 setAvailableRoles(res.data);
                 setLoading(false);
             })
-            .catch((err: any) => {
-                console.error("Failed to fetch roles", err);
+            .catch((err: unknown) => {
+                const errorMessage = err instanceof Error ? err.message : 'Failed to load roles';
+                console.error("Failed to fetch roles", errorMessage);
                 setError("Failed to load roles. Please try again.");
                 setLoading(false);
             });

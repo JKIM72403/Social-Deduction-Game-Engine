@@ -8,7 +8,7 @@ import RoleEditor from './RoleEditor';
 import RoleSelector from './RoleSelector';
 import PhaseEditor from './PhaseEditor';
 import WinConditionEditor from './WinConditionEditor';
-import type { GameData, Phase, WinCondition } from '../types';
+import type { GameData, Phase, WinCondition, RoleTemplate } from '../types';
 
 interface GameValidationState {
     errors: string[];
@@ -37,7 +37,7 @@ interface EditPanelProps {
     gameData: GameData;
     validationState: GameValidationState;
     onUpdateGame: (data: Partial<GameData>) => void;
-    onSaveRole: (role: any) => void;
+    onSaveRole: (role: RoleTemplate) => void;
     onSavePhase: (phase: Phase, index?: number) => void;
     onDeletePhase: (id?: number, index?: number) => void;
     onSaveWinCondition: (wc: WinCondition, index?: number) => void;
