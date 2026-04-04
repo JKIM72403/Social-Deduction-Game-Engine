@@ -25,6 +25,7 @@ class AbilityTemplate(models.Model):
     ability_type = models.CharField(max_length=20, choices=ABILITY_TYPES)
     phase = models.CharField(max_length=10, default="NIGHT")
     description = models.TextField(blank=True, default="")
+    is_default = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} ({self.ability_type})"
@@ -40,6 +41,7 @@ class RoleTemplate(models.Model):
     name = models.CharField(max_length=100)
     alignment = models.CharField(max_length=20, choices=ALIGNMENTS)
     description = models.TextField(blank=True, default="")
+    is_default = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name

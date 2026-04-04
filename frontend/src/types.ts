@@ -2,6 +2,7 @@ export type RoleSlot = {
     roleId: number;
     roleName: string;
     count: number;
+    isDefault?: boolean;
 };
 
 export type Phase = {
@@ -42,6 +43,7 @@ export type AbilityTemplate = {
     ability_type: string;
     phase: string;
     description: string;
+    is_default?: boolean;
 };
 
 export type RoleTemplate = {
@@ -50,6 +52,7 @@ export type RoleTemplate = {
     alignment: 'TOWN' | 'MAFIA' | 'NEUTRAL';
     description: string;
     ability_details: AbilityTemplate[];
+    is_default?: boolean;
 };
 
 export type SessionSummary = {
@@ -84,6 +87,7 @@ export type SessionParticipant = {
     role_alignment: string;
     joined_at: string;
     last_seen_at: string;
+    eliminated_at: string | null;
 };
 
 export type SessionState = {

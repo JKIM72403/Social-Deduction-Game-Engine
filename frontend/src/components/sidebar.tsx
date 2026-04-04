@@ -187,7 +187,7 @@ const Sidebar = ({
                 <SidebarSection
                     title="Roles in Game"
                     items={gameData.role_slots.map((slot, idx) => ({
-                        label: `${slot.roleName} (x${slot.count})`,
+                        label: `${slot.roleName} (x${slot.count})${slot.isDefault ? ' (default)' : ''}`,
                         id: slot.roleId,
                         index: idx
                     }))}

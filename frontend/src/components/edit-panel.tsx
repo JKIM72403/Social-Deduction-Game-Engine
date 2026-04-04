@@ -37,7 +37,7 @@ interface EditPanelProps {
     gameData: GameData;
     validationState: GameValidationState;
     onUpdateGame: (data: Partial<GameData>) => void;
-    onSaveRole: (role: RoleTemplate) => void;
+    onSaveRole: (role: RoleTemplate, originalId?: number) => void;
     onSavePhase: (phase: Phase, index?: number) => void;
     onDeletePhase: (id?: number, index?: number) => void;
     onSaveWinCondition: (wc: WinCondition, index?: number) => void;
@@ -157,8 +157,8 @@ const EditPanel = ({
             <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
                 <RoleEditor
                     roleId={selection.id}
-                    onSave={(updatedRole) => {
-                        onSaveRole(updatedRole);
+                    onSave={(updatedRole, originalId) => {
+                        onSaveRole(updatedRole, originalId);
                     }}
                     onCancel={onCancel}
                 />

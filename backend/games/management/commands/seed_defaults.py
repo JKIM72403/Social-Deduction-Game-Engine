@@ -24,20 +24,17 @@ class Command(BaseCommand):
         
         ability_objs = {}
         for name, atype, phase, desc in abilities:
-            obj, created = AbilityTemplate.objects.get_or_create(
-                name=name,
-                ability_type=atype,
-                phase=phase,
-                defaults={"description": desc}
-            )
-            # Update values if it already exists but they are different
-            if not created:
-                obj.ability_type = atype
-                obj.phase = phase
-                obj.save()
+            obj, created = AbilityTemplate.objects.get_or_create(name=name)
+            obj.ability_type = atype
+            obj.phase = phase
+            obj.description = desc
+            obj.is_default = True
+            obj.save()
             ability_objs[name] = obj
             if created:
                 self.stdout.write(self.style.SUCCESS(f'Created ability: {name}'))
+            else:
+                self.stdout.write(self.style.SUCCESS(f'Updated ability to default: {name}'))
 
         # Default Roles
         roles = [
@@ -72,13 +69,15 @@ class Command(BaseCommand):
         }
 
         for name, align, desc in roles:
-            role, created = RoleTemplate.objects.get_or_create(
-                name=name,
-                alignment=align,
-                defaults={"description": desc}
-            )
+            role, created = RoleTemplate.objects.get_or_create(name=name)
+            role.alignment = align
+            role.description = desc
+            role.is_default = True
+            role.save()
             if created:
                 self.stdout.write(self.style.SUCCESS(f'Created role: {name}'))
+            else:
+                self.stdout.write(self.style.SUCCESS(f'Updated role to default: {name}'))
             
             # Add abilities
             if name in role_ability_map:
