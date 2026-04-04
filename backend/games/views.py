@@ -84,11 +84,69 @@ def me_view(request):
 class AbilityTemplateViewSet(viewsets.ModelViewSet):
     queryset = AbilityTemplate.objects.all()
     serializer_class = AbilityTemplateSerializer
+    
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_default:
+            # Clone instead of update
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            new_obj = serializer.save(is_default=False)
+            return Response(self.get_serializer(new_obj).data, status=status.HTTP_201_CREATED)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_default:
+            # Combine instance data with partial updates
+            data = self.get_serializer(instance).data
+            data.update(request.data)
+            data.pop('id', None)
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            new_obj = serializer.save(is_default=False)
+            return Response(self.get_serializer(new_obj).data, status=status.HTTP_201_CREATED)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_default:
+            return Response({"error": "Cannot delete default abilities"}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
 
 class RoleTemplateViewSet(viewsets.ModelViewSet):
     queryset = RoleTemplate.objects.all()
     serializer_class = RoleTemplateSerializer
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_default:
+            # Clone instead of update
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            new_obj = serializer.save(is_default=False)
+            return Response(self.get_serializer(new_obj).data, status=status.HTTP_201_CREATED)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_default:
+            # Combine instance data with partial updates
+            data = self.get_serializer(instance).data
+            data.update(request.data)
+            data.pop('id', None)
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            new_obj = serializer.save(is_default=False)
+            return Response(self.get_serializer(new_obj).data, status=status.HTTP_201_CREATED)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_default:
+            return Response({"error": "Cannot delete default roles"}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
 
 class PhaseTemplateViewSet(viewsets.ModelViewSet):

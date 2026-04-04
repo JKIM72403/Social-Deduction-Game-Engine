@@ -17,7 +17,7 @@ import { COLORS } from '../constants/colors';
 
 interface Props {
     roleId?: number;
-    onSave: (role: RoleTemplate) => void;
+    onSave: (role: RoleTemplate, originalId?: number) => void;
     onCancel: () => void;
 }
 
@@ -96,12 +96,14 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
     const submit = async () => {
         try {
             let res;
+            const originalId = roleId;
             if (roleId) {
                 res = await API.put(`/roles/${roleId}/`, role);
             } else {
                 res = await API.post("/roles/", role);
             }
-            onSave(res.data);
+            // Pass both the updated role and the original ID to handle cloning/migration
+            onSave(res.data, originalId);
         } catch (e) {
             console.error(e);
             alert("Failed to save role");

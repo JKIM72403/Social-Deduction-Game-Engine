@@ -149,7 +149,8 @@ const GameEditor = () => {
                     const role_slots = data.role_slots.map((s) => ({
                         roleId: s.role,
                         roleName: s.role_details ? s.role_details.name : "Unknown Role",
-                        count: s.count
+                        count: s.count,
+                        isDefault: s.role_details ? s.role_details.is_default : false
                     }));
                     setGameData({
                         id: data.id,
@@ -174,18 +175,27 @@ const GameEditor = () => {
         setGameData(prev => ({ ...prev, ...data }));
     };
 
-    const handleRoleSaved = (role: RoleTemplate) => {
+    const handleRoleSaved = (role: RoleTemplate, originalId?: number) => {
         setGameData(prev => {
-            const existingSlotIndex = prev.role_slots.findIndex(s => s.roleId === role.id);
+            // Match against originalId if provided (handles cloning), else use the new role.id
+            const searchId = originalId ?? role.id;
+            const existingSlotIndex = prev.role_slots.findIndex(s => s.roleId === searchId);
+            
             if (existingSlotIndex >= 0) {
                 const newSlots = [...prev.role_slots];
-                newSlots[existingSlotIndex] = { ...newSlots[existingSlotIndex], roleName: role.name };
+                newSlots[existingSlotIndex] = {
+                    ...newSlots[existingSlotIndex],
+                    roleId: role.id as number, // Update to the new ID (if cloned)
+                    roleName: role.name,
+                    isDefault: role.is_default
+                };
                 return { ...prev, role_slots: newSlots };
             } else {
                 const newSlot: RoleSlot = {
-                    roleId: role.id,
+                    roleId: role.id as number,
                     roleName: role.name,
-                    count: 1
+                    count: 1,
+                    isDefault: role.is_default
                 };
                 return { ...prev, role_slots: [...prev.role_slots, newSlot] };
             }

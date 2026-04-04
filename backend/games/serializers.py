@@ -17,7 +17,7 @@ from .models import (
 class AbilityTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AbilityTemplate
-        fields = "__all__"
+        fields = ["id", "name", "ability_type", "phase", "description", "is_default"]
 
 
 class RoleAbilitySerializer(serializers.ModelSerializer):
@@ -38,7 +38,7 @@ class RoleTemplateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RoleTemplate
-        fields = ["id", "name", "alignment", "description", "abilities", "ability_details"]
+        fields = ["id", "name", "alignment", "description", "abilities", "ability_details", "is_default"]
 
     def create(self, validated_data):
         abilities = validated_data.pop("abilities", [])
