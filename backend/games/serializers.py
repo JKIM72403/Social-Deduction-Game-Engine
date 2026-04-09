@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
+    Alignment,
     AbilityTemplate,
     GameAction,
     GameParticipant,
@@ -12,6 +13,12 @@ from .models import (
     RoleTemplate,
     WinConditionTemplate,
 )
+
+
+class AlignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Alignment
+        fields = ["id", "name", "is_default"]
 
 
 class AbilityTemplateSerializer(serializers.ModelSerializer):
@@ -31,6 +38,7 @@ class RoleTemplateSerializer(serializers.ModelSerializer):
         many=True, queryset=AbilityTemplate.objects.all(), write_only=True
     )
     ability_details = serializers.SerializerMethodField()
+    alignment_name = serializers.CharField(source='alignment.name', read_only=True)
 
     def get_ability_details(self, obj):
         abilities = [ra.ability for ra in obj.abilities.all()]
@@ -38,7 +46,7 @@ class RoleTemplateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RoleTemplate
-        fields = ["id", "name", "alignment", "description", "abilities", "ability_details", "is_default"]
+        fields = ["id", "name", "alignment", "alignment_name", "description", "abilities", "ability_details", "is_default"]
 
     def create(self, validated_data):
         abilities = validated_data.pop("abilities", [])
@@ -79,9 +87,11 @@ class PhaseTemplateSerializer(serializers.ModelSerializer):
 
 
 class WinConditionTemplateSerializer(serializers.ModelSerializer):
+    winner_alignment_name = serializers.CharField(source='winner_alignment.name', read_only=True)
+
     class Meta:
         model = WinConditionTemplate
-        fields = ["id", "name", "game_template", "winner_alignment", "criteria", "order"]
+        fields = ["id", "name", "game_template", "winner_alignment", "winner_alignment_name", "criteria", "order"]
         read_only_fields = ["game_template"]
 
 

@@ -178,8 +178,8 @@ def evaluate_session_winner(session: GameSession, participants, turn_number: int
 
         if met:
             return (
-                win_condition.winner_alignment,
-                f"WIN CONDITION MET: {win_condition.name}! {win_condition.winner_alignment} Victory!",
+                win_condition.winner_alignment.name.upper(),
+                f"WIN CONDITION MET: {win_condition.name}! {win_condition.winner_alignment.name.upper()} Victory!",
             )
 
     return None, ""

@@ -177,10 +177,20 @@ const Sidebar = ({
                 variant="contained"
                 color="primary"
                 fullWidth
-                sx={{ mb: 3, fontWeight: 'bold' }}
+                sx={{ mb: 2, fontWeight: 'bold' }}
                 onClick={() => onSelect('GAME_SETTINGS')}
             >
                 Game Settings
+            </Button>
+
+            <Button
+                variant="outlined"
+                color="secondary"
+                fullWidth
+                sx={{ mb: 3, fontWeight: 'bold' }}
+                onClick={() => onSelect('ALIGNMENT_MANAGER' as any)}
+            >
+                Custom Alignments
             </Button>
 
             <DragDropContext onDragEnd={onDragEnd}>

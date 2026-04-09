@@ -8,10 +8,8 @@ logger = logging.getLogger(__name__)
 
 # --- Enums ---
 
-class Alignment(Enum):
-    TOWN = "TOWN"
-    MAFIA = "MAFIA"
-    NEUTRAL = "NEUTRAL"
+# Alignments are now strings to support custom ones.
+# Standard ones: "TOWN", "MAFIA", "NEUTRAL"
 
 class PhaseState(Enum):
     WAITING = "WAITING"
@@ -54,7 +52,7 @@ class InvestigateAbility(Ability):
             # Godfather shows as TOWN
             game.log(f"You investigated {target.name}: TOWN", "investigate", [source.name])
         else:
-            game.log(f"You investigated {target.name}: {target.role.alignment.value}", "investigate", [source.name])
+            game.log(f"You investigated {target.name}: {target.role.alignment}", "investigate", [source.name])
 
 class BlockAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
@@ -157,7 +155,7 @@ class ImmuneKillAbility(Ability):
             game.log(f"{target.name} was killed!", "kill", "all")
 
 class Role:
-    def __init__(self, name: str, alignment: Alignment, abilities: List[Ability] = None):
+    def __init__(self, name: str, alignment: str, abilities: List[Ability] = None):
         self.name = name
         self.alignment = alignment
         self.abilities = abilities or []
@@ -521,8 +519,8 @@ class GameEngine:
 
         # If no win conditions defined, use default fallback
         if not self.win_condition_configs:
-            mafia_count = sum(1 for p in alive if p.role.alignment == Alignment.MAFIA)
-            town_count = sum(1 for p in alive if p.role.alignment == Alignment.TOWN)
+            mafia_count = sum(1 for p in alive if p.role.alignment == "MAFIA")
+            town_count = sum(1 for p in alive if p.role.alignment == "TOWN")
             if mafia_count == 0:
                 self.log("Town wins!", "win")
                 self.phase_state = PhaseState.GAME_OVER
@@ -543,7 +541,7 @@ class GameEngine:
                     if actual_count != count:
                         met = False; break
                 elif ctype == 'ALIGNMENT_COUNT':
-                    actual_count = sum(1 for p in alive if p.role.alignment.value == target)
+                    actual_count = sum(1 for p in alive if p.role.alignment == target)
                     if actual_count != count:
                         met = False; break
                 elif ctype == 'SURVIVAL':

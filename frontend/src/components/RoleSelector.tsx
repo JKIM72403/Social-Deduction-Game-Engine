@@ -71,14 +71,6 @@ export default function RoleSelector({ existingSlots, onSelectRole, onCreateCust
         return existingSlots.some(slot => slot.roleId === roleId);
     };
 
-    const getRolesByAlignment = (alignment: 'TOWN' | 'MAFIA' | 'NEUTRAL') => {
-        return availableRoles.filter((role: RoleTemplate) => role.alignment === alignment);
-    };
-
-    const townRoles = getRolesByAlignment('TOWN');
-    const mafiaRoles = getRolesByAlignment('MAFIA');
-    const neutralRoles = getRolesByAlignment('NEUTRAL');
-
     if (loading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}>
@@ -98,13 +90,20 @@ export default function RoleSelector({ existingSlots, onSelectRole, onCreateCust
         );
     }
 
-    const renderRoleSection = (title: string, roles: RoleTemplate[], alignment: 'TOWN' | 'MAFIA' | 'NEUTRAL') => {
+    const uniqueAlignments = Array.from(new Set(availableRoles.map(r => r.alignment_name || 'Unknown')));
+
+    const renderRoleSection = (alignmentName: string) => {
+        const roles = availableRoles.filter(r => (r.alignment_name || 'Unknown') === alignmentName);
         if (roles.length === 0) return null;
 
-        const colors = alignmentColors[alignment];
+        const alignmentKey = alignmentName.toUpperCase();
+        const colors = (alignmentColors as any)[alignmentKey] || {
+            color: COLORS.NEUTRAL,
+            bgColor: 'rgba(255, 255, 255, 0.05)',
+        };
 
         return (
-            <Box sx={{ mb: 3 }}>
+            <Box key={alignmentName} sx={{ mb: 3 }}>
                 <Typography 
                     variant="subtitle2" 
                     sx={{ 
@@ -116,7 +115,7 @@ export default function RoleSelector({ existingSlots, onSelectRole, onCreateCust
                         letterSpacing: '0.05em'
                     }}
                 >
-                    {title}
+                    {alignmentName} Roles
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                     {roles.map(role => {
@@ -163,9 +162,7 @@ export default function RoleSelector({ existingSlots, onSelectRole, onCreateCust
                 + Create Custom Role
             </Button>
 
-            {renderRoleSection('Town Roles', townRoles, 'TOWN')}
-            {renderRoleSection('Mafia Roles', mafiaRoles, 'MAFIA')}
-            {renderRoleSection('Neutral Roles', neutralRoles, 'NEUTRAL')}
+            {uniqueAlignments.sort().map(align => renderRoleSection(align))}
 
             {availableRoles.length === 0 && (
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', my: 4 }}>

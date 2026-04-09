@@ -1,3 +1,9 @@
+export type Alignment = {
+    id: number;
+    name: string;
+    is_default: boolean;
+};
+
 export type RoleSlot = {
     roleId: number;
     roleName: string;
@@ -21,7 +27,8 @@ export type Criterion = {
 export type WinCondition = {
     id?: number;
     name: string;
-    winner_alignment: 'TOWN' | 'MAFIA' | 'NEUTRAL';
+    winner_alignment: number; // ID of the alignment
+    winner_alignment_name?: string;
     criteria: Criterion[];
     order: number;
 };
@@ -49,7 +56,8 @@ export type AbilityTemplate = {
 export type RoleTemplate = {
     id: number;
     name: string;
-    alignment: 'TOWN' | 'MAFIA' | 'NEUTRAL';
+    alignment: number; // ID of the alignment
+    alignment_name?: string;
     description: string;
     ability_details: AbilityTemplate[];
     is_default?: boolean;
