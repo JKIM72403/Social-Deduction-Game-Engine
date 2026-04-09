@@ -4,6 +4,14 @@ import string
 from django.conf import settings
 from django.db import models
 
+class Alignment(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_default = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
+
+
 class AbilityTemplate(models.Model):
     ABILITY_TYPES = [
         ("KILL", "Kill Target"),
@@ -31,15 +39,12 @@ class AbilityTemplate(models.Model):
         return f"{self.name} ({self.ability_type})"
 
 
-class RoleTemplate(models.Model):
-    ALIGNMENTS = [
-        ("TOWN", "Town"),
-        ("MAFIA", "Mafia"),
-        ("NEUTRAL", "Neutral"),
-    ]
+def get_default_alignment():
+    return Alignment.objects.get_or_create(name="Town", is_default=True)[0]
 
+class RoleTemplate(models.Model):
     name = models.CharField(max_length=100)
-    alignment = models.CharField(max_length=20, choices=ALIGNMENTS)
+    alignment = models.ForeignKey(Alignment, on_delete=models.SET(get_default_alignment), related_name="roles")
     description = models.TextField(blank=True, default="")
     is_default = models.BooleanField(default=False)
 
@@ -100,11 +105,9 @@ class PhaseTemplate(models.Model):
 
 
 class WinConditionTemplate(models.Model):
-    ALIGNMENTS = RoleTemplate.ALIGNMENTS
-
     game_template = models.ForeignKey(GameTemplate, related_name="win_conditions", on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
-    winner_alignment = models.CharField(max_length=20, choices=ALIGNMENTS, default="TOWN")
+    winner_alignment = models.ForeignKey(Alignment, on_delete=models.SET(get_default_alignment), related_name="win_conditions")
     
     # JSON structure: [{"type": "ROLE_COUNT", "target": role_id, "count": 0}, ...]
     criteria = models.JSONField(default=list)
@@ -114,7 +117,7 @@ class WinConditionTemplate(models.Model):
         ordering = ['order']
 
     def __str__(self):
-        return f"{self.game_template.name} - {self.name} (Winner: {self.winner_alignment})"
+        return f"{self.game_template.name} - {self.name} (Winner: {self.winner_alignment.name})"
 
 
 class GameSession(models.Model):

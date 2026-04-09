@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     RoleTemplateViewSet, AbilityTemplateViewSet, GameTemplateViewSet,
-    PhaseTemplateViewSet, WinConditionTemplateViewSet,
+    PhaseTemplateViewSet, WinConditionTemplateViewSet, AlignmentViewSet,
     create_network_session, join_network_session,
     network_session_snapshot, set_network_session_ready, start_network_session,
     submit_network_session_action,
@@ -16,6 +16,7 @@ router.register(r'abilities', AbilityTemplateViewSet)
 router.register(r'game-templates', GameTemplateViewSet)
 router.register(r'phases', PhaseTemplateViewSet)
 router.register(r'win-conditions', WinConditionTemplateViewSet)
+router.register(r'alignments', AlignmentViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

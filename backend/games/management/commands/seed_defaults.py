@@ -1,10 +1,25 @@
 from django.core.management.base import BaseCommand
-from games.models import RoleTemplate, AbilityTemplate, RoleAbility
+from games.models import RoleTemplate, AbilityTemplate, RoleAbility, Alignment
 
 class Command(BaseCommand):
     help = 'Seeds default roles and abilities'
 
     def handle(self, *args, **options):
+        # Default Alignments
+        alignments = [
+            ("Town", True),
+            ("Mafia", True),
+            ("Neutral", True),
+        ]
+        alignment_objs = {}
+        for name, is_default in alignments:
+            obj, created = Alignment.objects.get_or_create(name=name)
+            obj.is_default = is_default
+            obj.save()
+            alignment_objs[name.upper()] = obj
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'Created alignment: {name}'))
+
         # Default Abilities
         abilities = [
             ("Kill", "KILL", "NIGHT", "Eliminate a player during the night."),
@@ -68,9 +83,9 @@ class Command(BaseCommand):
             "Arsonist": ["Douse", "Ignite"],
         }
 
-        for name, align, desc in roles:
-            role, created = RoleTemplate.objects.get_or_create(name=name)
-            role.alignment = align
+        for name, align_key, desc in roles:
+            role, created = RoleTemplate.objects.get_or_create(name=name, alignment=alignment_objs[align_key])
+            role.alignment = alignment_objs[align_key]
             role.description = desc
             role.is_default = True
             role.save()

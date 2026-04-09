@@ -40,9 +40,10 @@ const unselectedChipSx = {
 
 export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
     const [abilities, setAbilities] = useState<AbilityTemplate[]>([]);
+    const [alignments, setAlignments] = useState<any[]>([]);
     const [role, setRole] = useState({
         name: "",
-        alignment: "TOWN",
+        alignment: "" as string | number,
         description: "",
         abilities: [] as number[],
     });
@@ -53,6 +54,16 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
     useEffect(() => {
         // Fetch all abilities
         API.get("/abilities/").then(res => setAbilities(res.data));
+        
+        // Fetch all alignments
+        API.get("/alignments/").then(res => {
+            setAlignments(res.data);
+            if (!roleId && res.data.length > 0) {
+                // Default to Town if available
+                const town = res.data.find((a: any) => a.name.toUpperCase() === 'TOWN');
+                setRole(r => ({ ...r, alignment: town ? town.id : res.data[0].id }));
+            }
+        });
 
         // If editing an existing role, fetch its data
         if (roleId) {
@@ -131,9 +142,9 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
                     label="Alignment"
                     onChange={e => setRole({ ...role, alignment: e.target.value })}
                 >
-                    <MenuItem value="TOWN">Town</MenuItem>
-                    <MenuItem value="MAFIA">Mafia</MenuItem>
-                    <MenuItem value="NEUTRAL">Neutral</MenuItem>
+                    {alignments.map(a => (
+                        <MenuItem key={a.id} value={a.id}>{a.name}</MenuItem>
+                    ))}
                 </Select>
             </FormControl>
 

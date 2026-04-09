@@ -12,9 +12,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .engine import Alignment, PhaseState
+from .engine import PhaseState
 from .engine_builder import build_game_engine
 from .models import (
+    Alignment,
     AbilityTemplate,
     GameAction,
     GameParticipant,
@@ -25,6 +26,7 @@ from .models import (
     WinConditionTemplate,
 )
 from .serializers import (
+    AlignmentSerializer,
     AbilityTemplateSerializer,
     CreateSessionSerializer,
     GameTemplateSerializer,
@@ -146,6 +148,17 @@ class RoleTemplateViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.is_default:
             return Response({"error": "Cannot delete default roles"}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
+
+class AlignmentViewSet(viewsets.ModelViewSet):
+    queryset = Alignment.objects.all()
+    serializer_class = AlignmentSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_default:
+            return Response({"error": "Cannot delete default alignments"}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
 
 
@@ -390,7 +403,7 @@ def start_network_session(request, session_id):
     for participant in participants:
         player = players_by_name[participant.display_name]
         participant.role_name = player.role.name
-        participant.role_alignment = player.role.alignment.value
+        participant.role_alignment = player.role.alignment
         participant.is_alive = player.is_alive
         participant.is_ready = False
 
@@ -572,7 +585,7 @@ def serialize_game_state(session_id, engine, user_name):
                 "name": player.name,
                 "is_alive": player.is_alive,
                 "role": player.role.name if reveal_role else "Unknown",
-                "alignment": player.role.alignment.value if reveal_role else "Unknown",
+                "alignment": player.role.alignment if reveal_role else "Unknown",
             }
         )
 
@@ -590,7 +603,7 @@ def serialize_game_state(session_id, engine, user_name):
             "name": user_name,
             "is_alive": user_player.is_alive if user_player else False,
             "role": user_player.role.name if user_player else "Observer",
-            "alignment": user_player.role.alignment.value if user_player else "Unknown",
+            "alignment": user_player.role.alignment if user_player else "Unknown",
             "abilities": abilities,
         },
         "logs": [
@@ -626,13 +639,12 @@ def start_game_session(request):
 
 
 def _get_bot_target(bot, engine, available_players, ability=None, is_vote=False):
-    from .engine import Alignment
     known_mafia = set()
     known_town = set()
 
-    if bot.role.alignment == Alignment.MAFIA:
+    if bot.role.alignment == "MAFIA":
         for p in engine.players:
-            if p.role.alignment == Alignment.MAFIA:
+            if p.role.alignment == "MAFIA":
                 known_mafia.add(p.name)
 
     for event in engine.events:
@@ -674,7 +686,7 @@ def _get_bot_target(bot, engine, available_players, ability=None, is_vote=False)
             if valid:
                 return random.choice(valid)
 
-    if bot.role.alignment == Alignment.MAFIA:
+    if bot.role.alignment == "MAFIA":
         if is_hostile:
             valid = [p for p in alive_targets if p.name not in known_mafia]
             if valid:

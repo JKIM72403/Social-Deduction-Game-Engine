@@ -31,15 +31,29 @@ interface Props {
 }
 
 export default function WinConditionEditor({ gameId, winConditionId, initialData, roleSlots, onSave, onCancel, onDelete }: Props) {
+    const [alignments, setAlignments] = useState<any[]>([]);
     const [wc, setWc] = useState<WinCondition>(initialData || {
         name: "",
-        winner_alignment: "TOWN",
+        winner_alignment: 0,
         criteria: [{ type: 'ALIGNMENT_COUNT', target: 'MAFIA', count: 0 }],
         order: 0
     });
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     useEffect(() => {
+        API.get("/alignments/").then(res => {
+            setAlignments(res.data);
+            if (!initialData && !winConditionId && res.data.length > 0) {
+                const town = res.data.find((a: any) => a.name.toUpperCase() === 'TOWN');
+                const townName = town ? town.name.toUpperCase() : res.data[0].name.toUpperCase();
+                setWc(prev => ({
+                    ...prev,
+                    winner_alignment: town ? town.id : res.data[0].id,
+                    criteria: [{ type: 'ALIGNMENT_COUNT', target: townName, count: 0 }]
+                }));
+            }
+        });
+
         if (initialData) {
             setWc(initialData);
         } else if (winConditionId) {
@@ -129,9 +143,9 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
                     label="Winner Alignment"
                     onChange={e => setWc({ ...wc, winner_alignment: e.target.value as any })}
                 >
-                    <MenuItem value="TOWN">Town Wins</MenuItem>
-                    <MenuItem value="MAFIA">Mafia Wins</MenuItem>
-                    <MenuItem value="NEUTRAL">Neutral Wins</MenuItem>
+                    {alignments.map(a => (
+                        <MenuItem key={a.id} value={a.id}>{a.name} Wins</MenuItem>
+                    ))}
                 </Select>
             </FormControl>
 
@@ -158,7 +172,7 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
                         <Select
                             value={c.type}
                             label="Rule Type"
-                            onChange={e => updateCriterion(index, { type: e.target.value as any, target: e.target.value === 'ROLE_COUNT' ? (roleSlots[0]?.roleName || '') : 'MAFIA' })}
+                            onChange={e => updateCriterion(index, { type: e.target.value as any, target: e.target.value === 'ROLE_COUNT' ? (roleSlots[0]?.roleName || '') : (alignments[0]?.name.toUpperCase() || 'MAFIA') })}
                         >
                             <MenuItem value="ROLE_COUNT">Specific Role Count</MenuItem>
                             <MenuItem value="ALIGNMENT_COUNT">Alignment Count</MenuItem>
@@ -190,9 +204,9 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
                                     label="Alignment"
                                     onChange={e => updateCriterion(index, { target: e.target.value })}
                                 >
-                                    <MenuItem value="TOWN">Town</MenuItem>
-                                    <MenuItem value="MAFIA">Mafia</MenuItem>
-                                    <MenuItem value="NEUTRAL">Neutral</MenuItem>
+                                    {alignments.map(a => (
+                                        <MenuItem key={a.id} value={a.name.toUpperCase()}>{a.name}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
                         )}

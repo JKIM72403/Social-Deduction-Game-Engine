@@ -119,13 +119,13 @@ const GameEditor = () => {
         win_conditions: [
             {
                 name: "Town Victory (default)",
-                winner_alignment: "TOWN",
+                winner_alignment: 1, // Placeholder for Town
                 order: 0,
                 criteria: [{ type: "ALIGNMENT_COUNT", target: "MAFIA", count: 0 }]
             },
             {
                 name: "Mafia Victory (default)",
-                winner_alignment: "MAFIA",
+                winner_alignment: 2, // Placeholder for Mafia
                 order: 1,
                 criteria: [{ type: "ALIGNMENT_COUNT", target: "TOWN", count: 0 }]
             }
@@ -392,6 +392,8 @@ const GameEditor = () => {
                             setSelection({ type: 'PHASE', id, index });
                         } else if (type === 'WIN_CONDITION' && index !== undefined) {
                             setSelection({ type: 'WIN_CONDITION', id, index });
+                        } else if ((type as string) === 'ALIGNMENT_MANAGER') {
+                            setSelection({ type: 'ALIGNMENT_MANAGER' });
                         } else {
                             setSelection({ type: 'GAME_SETTINGS' });
                         }

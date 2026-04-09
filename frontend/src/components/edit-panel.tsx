@@ -8,6 +8,7 @@ import RoleEditor from './RoleEditor';
 import RoleSelector from './RoleSelector';
 import PhaseEditor from './PhaseEditor';
 import WinConditionEditor from './WinConditionEditor';
+import AlignmentManager from './AlignmentManager';
 import type { GameData, Phase, WinCondition, RoleTemplate } from '../types';
 
 interface GameValidationState {
@@ -30,6 +31,7 @@ export type Selection =
     | { type: 'NEW_PHASE' }
     | { type: 'WIN_CONDITION', id?: number, index: number }
     | { type: 'NEW_WIN_CONDITION' }
+    | { type: 'ALIGNMENT_MANAGER' }
     | null;
 
 interface EditPanelProps {
@@ -162,6 +164,14 @@ const EditPanel = ({
                     }}
                     onCancel={onCancel}
                 />
+            </Box>
+        );
+    }
+
+    if (selection.type === 'ALIGNMENT_MANAGER') {
+        return (
+            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+                <AlignmentManager onCancel={onCancel} />
             </Box>
         );
     }

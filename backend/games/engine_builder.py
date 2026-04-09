@@ -3,7 +3,7 @@ from .engine import (
     Role, Ability, KillAbility, ProtectAbility, InvestigateAbility, 
     TrapAbility, VoteStealAbility, DoubleVoteAbility, BlockAbility,
     RoleblockAbility, LookoutAbility, JailAbility, DouseAbility, IgniteAbility, ImmuneKillAbility,
-    Alignment, GameEngine, Player
+    GameEngine, Player
 )
 
 def build_ability(ability_template: AbilityTemplate):
@@ -46,11 +46,9 @@ def build_role(role_template: RoleTemplate) -> Role:
     for ra in role_template.abilities.all():
         abilities.append(build_ability(ra.ability))
     
-    # Map alignment string to Enum
-    try:
-        alignment = Alignment(role_template.alignment)
-    except ValueError:
-        alignment = Alignment.NEUTRAL
+    # Alignment is now a string (we use the name or a specific key)
+    # We'll use the name for simplicity in the engine
+    alignment = role_template.alignment.name.upper()
         
     return Role(role_template.name, alignment, abilities)
 
