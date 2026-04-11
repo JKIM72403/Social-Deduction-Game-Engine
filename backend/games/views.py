@@ -12,6 +12,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from db.repository import get_repository
+from .broadcast import post_write_broadcast
 from .engine import PhaseState
 from .engine_builder import build_game_engine
 from .models import (
@@ -208,6 +210,11 @@ class GameTemplateViewSet(viewsets.ModelViewSet):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_network_session(request):
+    """Create a new multiplayer session.
+    
+    Refactored to use Repository pattern (Phase 5).
+    """
+    repo = get_repository()
     serializer = CreateSessionSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
@@ -221,30 +228,21 @@ def create_network_session(request):
     requested_name = serializer.validated_data.get("display_name", "")
 
     with transaction.atomic():
-        session = GameSession.objects.create(
-            template=template,
-            host=request.user,
+        session_doc = repo.create_session(template.id, request.user.id)
+        session_id = session_doc["_id"]
+        
+        display_name = _ensure_unique_display_name_via_repo(
+            repo,
+            session_id,
+            requested_name,
+            request.user.username,
         )
-        GameParticipant.objects.create(
-            session=session,
-            user=request.user,
-            display_name=_ensure_unique_display_name(
-                session,
-                requested_name,
-                request.user.username,
-            ),
-            seat_order=0,
-            is_connected=True,
-        )
-        transaction.on_commit(
-            lambda session_id=session.id: broadcast_session_event(
-                session_id,
-                "session.created",
-            )
-        )
+        repo.create_participant(session_id, request.user.id, display_name, 0)
+
+    post_write_broadcast(session_id, "session.created")
 
     return Response(
-        load_session_snapshot(session.id, viewer_user_id=request.user.id),
+        load_session_snapshot(session_id, viewer_user_id=request.user.id),
         status=status.HTTP_201_CREATED,
     )
 
@@ -252,60 +250,66 @@ def create_network_session(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def join_network_session(request):
+    """Join an existing session by join code.
+    
+    Example of refactored view using the Repository abstraction instead of
+    direct ORM calls. See Phase 3 doc for remaining view refactors.
+    """
+    repo = get_repository()
     serializer = JoinSessionSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    join_code = serializer.validated_data["join_code"].strip().upper()
+    join_code = serializer.validated_data["join_code"]
     requested_name = serializer.validated_data.get("display_name", "")
 
-    try:
-        session = GameSession.objects.select_related("template", "host").get(join_code=join_code)
-    except GameSession.DoesNotExist:
+    # Fetch session document via repository
+    session_doc = repo.get_session_by_join_code(join_code)
+    if session_doc is None:
         return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    existing_participant = session.participants.filter(user=request.user).first()
-    if existing_participant:
-        existing_participant.is_connected = True
-        existing_participant.save(update_fields=["is_connected", "last_seen_at"])
-        transaction.on_commit(
-            lambda session_id=session.id: broadcast_session_event(
-                session_id,
-                "participant.rejoined",
-            )
-        )
-        return Response(load_session_snapshot(session.id, viewer_user_id=request.user.id))
+    session_id = session_doc["_id"]
 
-    if session.status != GameSession.STATUS_LOBBY:
+    # Check for existing participant
+    existing = repo.get_participant_by_session_and_user(session_id, request.user.id)
+    if existing:
+        # Reconnection case: mark as connected again
+        repo.update_participant(existing["_id"], is_connected=True, last_seen_at=timezone.now())
+        post_write_broadcast(session_id, "participant.rejoined")
+        return Response(load_session_snapshot(session_id, viewer_user_id=request.user.id))
+
+    if session_doc["status"] != GameSession.STATUS_LOBBY:
         return Response(
             {"error": "Session is no longer accepting new players"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    participant_count = session.participants.count()
-    if participant_count >= session.template.max_players:
+    # Count current participants
+    participants = repo.get_participants_for_session(session_id)
+    # Template data comes from relational store until full Phase 5+ migration
+    template = GameTemplate.objects.get(id=session_doc["template_id"])
+    if len(participants) >= template.max_players:
         return Response({"error": "Session is full"}, status=status.HTTP_400_BAD_REQUEST)
 
+    display_name = _ensure_unique_display_name_via_repo(
+        repo,
+        session_id,
+        requested_name,
+        request.user.username,
+    )
+    next_seat = _get_next_seat_order_via_repo(repo, session_id)
+
     with transaction.atomic():
-        participant = GameParticipant.objects.create(
-            session=session,
-            user=request.user,
-            display_name=_ensure_unique_display_name(
-                session,
-                requested_name,
-                request.user.username,
-            ),
-            seat_order=_get_next_seat_order(session),
-            is_connected=True,
-        )
-        transaction.on_commit(
-            lambda session_id=session.id: broadcast_session_event(
-                session_id,
-                "participant.joined",
-            )
+        participant_doc = repo.create_participant(
+            session_id,
+            request.user.id,
+            display_name,
+            next_seat,
         )
 
+    post_write_broadcast(session_id, "participant.joined")
+
     return Response(
-        load_session_snapshot(participant.session_id, viewer_user_id=request.user.id),
+        load_session_snapshot(session_id, viewer_user_id=request.user.id),
         status=status.HTTP_200_OK,
     )
 
@@ -313,77 +317,87 @@ def join_network_session(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def network_session_snapshot(request, session_id):
-    session = _get_session_for_user(session_id, request.user)
-    if session is None:
+    repo = get_repository()
+    session_doc = repo.get_session_by_id(session_id)
+    if session_doc is None:
         return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(load_session_snapshot(session.id, viewer_user_id=request.user.id))
+    is_host = session_doc["host_user_id"] == request.user.id
+    if not is_host and repo.get_participant_by_session_and_user(session_id, request.user.id) is None:
+        return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response(load_session_snapshot(session_id, viewer_user_id=request.user.id))
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def set_network_session_ready(request, session_id):
+    """Toggle participant ready state.
+    
+    Refactored to use Repository pattern (Phase 5).
+    """
+    repo = get_repository()
     serializer = SessionReadySerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    session = _get_session_for_user(session_id, request.user)
-    if session is None:
+    # Check authorization via session + participant
+    session_doc = repo.get_session_by_id(session_id)
+    if session_doc is None:
         return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    if session.status != GameSession.STATUS_LOBBY:
+    if session_doc["status"] != GameSession.STATUS_LOBBY:
         return Response(
             {"error": "Ready state can only be changed while the session is in the lobby"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    participant = session.participants.filter(user=request.user).first()
-    if participant is None:
+    participant_doc = repo.get_participant_by_session_and_user(session_id, request.user.id)
+    if participant_doc is None:
         return Response({"error": "Not a session participant"}, status=status.HTTP_403_FORBIDDEN)
 
-    participant.is_ready = serializer.validated_data.get("is_ready", not participant.is_ready)
-    participant.save(update_fields=["is_ready", "last_seen_at"])
-    transaction.on_commit(
-        lambda session_id=session.id: broadcast_session_event(
-            session_id,
-            "participant.ready_changed",
-        )
+    new_ready_state = serializer.validated_data.get("is_ready", not participant_doc["is_ready"])
+    repo.update_participant(
+        participant_doc["_id"],
+        is_ready=new_ready_state,
     )
+    post_write_broadcast(session_id, "participant.ready_changed")
 
-    return Response(load_session_snapshot(session.id, viewer_user_id=request.user.id))
+    return Response(load_session_snapshot(session_id, viewer_user_id=request.user.id))
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def start_network_session(request, session_id):
-    session = (
-        GameSession.objects.select_related("template", "host")
-        .prefetch_related("participants__user", "template__phases", "template__win_conditions", "template__role_slots__role__abilities__ability")
-        .filter(id=session_id)
-        .first()
-    )
-    if session is None:
+    repo = get_repository()
+    session_doc = repo.get_session_by_id(session_id)
+    if session_doc is None:
         return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    if session.host_id != request.user.id:
+    if session_doc["host_user_id"] != request.user.id:
         return Response({"error": "Only the host can start the session"}, status=status.HTTP_403_FORBIDDEN)
 
-    if session.status != GameSession.STATUS_LOBBY:
+    if session_doc["status"] != GameSession.STATUS_LOBBY:
         return Response({"error": "Session has already started"}, status=status.HTTP_400_BAD_REQUEST)
 
-    participants = list(session.participants.select_related("user").order_by("seat_order", "joined_at"))
-    if len(participants) < session.template.min_players:
+    # Fetch template data (configuration — still in ORM)
+    template = GameTemplate.objects.prefetch_related("phases", "win_conditions", "role_slots__role__abilities__ability").get(id=session_doc["template_id"])
+
+    # Get participant docs from repo (no separate ORM participant fetch)
+    participant_docs = repo.get_participants_for_session(session_id)
+
+    if len(participant_docs) < template.min_players:
         return Response(
-            {"error": f"Need at least {session.template.min_players} players to start"},
+            {"error": f"Need at least {template.min_players} players to start"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if len(participants) > session.template.max_players:
+    if len(participant_docs) > template.max_players:
         return Response(
-            {"error": f"Session exceeds max player count of {session.template.max_players}"},
+            {"error": f"Session exceeds max player count of {template.max_players}"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if any(not participant.is_ready for participant in participants):
+    if any(not p["is_ready"] for p in participant_docs):
         return Response(
             {"error": "All participants must be ready before the game can start"},
             status=status.HTTP_400_BAD_REQUEST,
@@ -391,51 +405,43 @@ def start_network_session(request, session_id):
 
     try:
         engine = build_game_engine(
-            session.template,
-            [participant.display_name for participant in participants],
+            template,
+            [p["display_name"] for p in participant_docs],
         )
         engine.start_game()
-        started_state = build_started_session_state(engine, participants)
+        started_state = build_started_session_state(engine, participant_docs)
     except ValueError as exc:
         return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
     players_by_name = {player.name: player for player in engine.players}
-    for participant in participants:
-        player = players_by_name[participant.display_name]
-        participant.role_name = player.role.name
-        participant.role_alignment = player.role.alignment
-        participant.is_alive = player.is_alive
-        participant.is_ready = False
 
     with transaction.atomic():
-        GameParticipant.objects.bulk_update(
-            participants,
-            ["role_name", "role_alignment", "is_alive", "is_ready", "last_seen_at"],
-        )
-        session.status = GameSession.STATUS_IN_PROGRESS
-        session.current_phase = engine.phase_state.value
-        session.turn_number = started_state["turn_number"]
-        session.started_at = timezone.now()
-        session.state_json = started_state
-        session.current_phase = started_state["phase"]
-        session.save(
-            update_fields=[
-                "status",
-                "current_phase",
-                "turn_number",
-                "started_at",
-                "state_json",
-                "updated_at",
-            ]
-        )
-        transaction.on_commit(
-            lambda session_id=session.id: broadcast_session_event(
-                session_id,
-                "session.started",
+        # Update each participant with their assigned role
+        for participant_doc in participant_docs:
+            player = players_by_name.get(participant_doc["display_name"])
+            if player is None:
+                continue
+            repo.update_participant(
+                participant_doc["_id"],
+                role_name=player.role.name,
+                role_alignment=player.role.alignment.value,
+                is_alive=player.is_alive,
+                is_ready=False,
             )
+
+        # Update session status and state
+        repo.update_session(
+            session_id,
+            status=GameSession.STATUS_IN_PROGRESS,
+            current_phase=started_state["phase"],
+            turn_number=started_state["turn_number"],
+            started_at=timezone.now(),
+            state_json=started_state,
         )
 
-    return Response(load_session_snapshot(session.id, viewer_user_id=request.user.id))
+    post_write_broadcast(session_id, "session.started")
+
+    return Response(load_session_snapshot(session_id, viewer_user_id=request.user.id))
 
 
 @api_view(["POST"])
@@ -444,123 +450,149 @@ def submit_network_session_action(request, session_id):
     serializer = SubmitSessionActionSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    session = (
-        GameSession.objects.select_related("template", "host")
-        .prefetch_related("participants__user", "template__win_conditions")
-        .filter(id=session_id)
-        .first()
-    )
-    if session is None:
+    repo = get_repository()
+    session_doc = repo.get_session_by_id(session_id)
+    if session_doc is None:
         return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    participant = session.participants.filter(user=request.user).first()
-    if participant is None:
+    participant_doc = repo.get_participant_by_session_and_user(session_id, request.user.id)
+    if participant_doc is None:
         return Response({"error": "Not a session participant"}, status=status.HTTP_403_FORBIDDEN)
 
-    if session.status != GameSession.STATUS_IN_PROGRESS:
+    if session_doc["status"] != GameSession.STATUS_IN_PROGRESS:
         return Response(
             {"error": "The session is not currently in progress"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if session.current_phase != GameSession.PHASE_VOTING:
+    if session_doc["current_phase"] != GameSession.PHASE_VOTING:
         return Response(
             {"error": "Votes can only be submitted during the voting phase"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not participant.is_alive:
+    if not participant_doc["is_alive"]:
         return Response(
             {"error": "Eliminated participants cannot vote"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    target_participant = session.participants.filter(
-        id=serializer.validated_data["target_participant_id"]
-    ).first()
-    if target_participant is None:
+    target_participant_doc = repo.get_participant_by_id(serializer.validated_data["target_participant_id"])
+    if target_participant_doc is None or target_participant_doc["session_id"] != session_id:
         return Response({"error": "Vote target not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    if not target_participant.is_alive:
+    if not target_participant_doc["is_alive"]:
         return Response(
             {"error": "You can only vote for living participants"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    existing_vote = session.actions.filter(
-        participant=participant,
-        phase=GameSession.PHASE_VOTING,
-        action_type="VOTE",
-        status=GameAction.STATUS_SUBMITTED,
-        turn_number=session.turn_number,
-    ).first()
-    if existing_vote is not None:
-        return Response(
-            {"error": "You have already locked in your vote for this round"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
     with transaction.atomic():
-        GameAction.objects.create(
-            session=session,
-            participant=participant,
-            turn_number=session.turn_number,
-            phase=GameSession.PHASE_VOTING,
-            action_type="VOTE",
-            payload={
-                "target_participant_id": target_participant.id,
-                "target_display_name": target_participant.display_name,
-            },
-        )
+        # Re-fetch the participant and target inside the transaction with a lock
+        # for ORM-based race condition prevention
+        participant_doc = repo.get_participant_with_lock(session_id, request.user.id)
+        if participant_doc is None or not participant_doc["is_alive"]:
+            return Response(
+                {"error": "Participant no longer eligible to vote"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        state = dict(session.state_json or {})
+        target_participant_doc = repo.get_participant_by_id(serializer.validated_data["target_participant_id"])
+        if target_participant_doc is None or not target_participant_doc["is_alive"]:
+            return Response(
+                {"error": "Vote target is no longer a valid living participant"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing_vote = repo.check_existing_vote(
+            session_id,
+            participant_doc["_id"],
+            session_doc["turn_number"],
+        )
+        if existing_vote is not None:
+            return Response(
+                {"error": "You have already locked in your vote for this round"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            repo.create_action(
+                session_id,
+                participant_doc["_id"],
+                turn_number=session_doc["turn_number"],
+                phase=GameSession.PHASE_VOTING,
+                action_type="VOTE",
+                payload={
+                    "target_participant_id": target_participant_doc["_id"],
+                    "target_display_name": target_participant_doc["display_name"],
+                },
+            )
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        state = dict(session_doc.get("state_json") or {})
         vote_state = dict(state.get("vote_state") or {})
         submitted_participant_ids = list(vote_state.get("submitted_participant_ids") or [])
-        if participant.id not in submitted_participant_ids:
-            submitted_participant_ids.append(participant.id)
+        if participant_doc["_id"] not in submitted_participant_ids:
+            submitted_participant_ids.append(participant_doc["_id"])
         state = record_vote_progress(state, submitted_participant_ids)
 
-        alive_participant_count = session.participants.filter(is_alive=True).count()
+        # Count alive participants
+        all_participants = repo.get_participants_for_session(session_id)
+        alive_participant_count = sum(1 for p in all_participants if p["is_alive"])
         all_votes_submitted = len(submitted_participant_ids) >= alive_participant_count
 
-        participants = list(session.participants.order_by("seat_order", "joined_at"))
-        session.state_json = state
         broadcast_reason = "vote.submitted"
 
         if all_votes_submitted:
-            next_state, eliminated_participant, winner_alignment = resolve_voting_round(
-                session,
-                participants,
+            # Load win conditions from template config (ORM — template data, not runtime)
+            from games.models import WinConditionTemplate
+            win_conditions = list(
+                WinConditionTemplate.objects
+                .filter(game_template_id=session_doc["template_id"])
+                .order_by("order")
             )
-            session.state_json = next_state
-            session.turn_number = next_state["turn_number"]
-            session.current_phase = next_state["phase"]
-            update_fields = ["state_json", "turn_number", "current_phase", "updated_at"]
 
-            if eliminated_participant is not None:
-                GameParticipant.objects.bulk_update(
-                    [participant for participant in participants if participant.id == eliminated_participant.id],
-                    ["is_alive", "eliminated_at", "last_seen_at"],
+            next_state, eliminated_participant_id, winner_alignment = resolve_voting_round(
+                repo, session_doc, all_participants, win_conditions
+            )
+
+            if eliminated_participant_id is not None:
+                repo.update_participant(
+                    eliminated_participant_id,
+                    is_alive=False,
+                    eliminated_at=timezone.now(),
                 )
 
             if winner_alignment:
-                session.status = GameSession.STATUS_COMPLETED
-                session.ended_at = timezone.now()
-                update_fields.extend(["status", "ended_at"])
-
-            session.save(update_fields=update_fields)
+                repo.update_session(
+                    session_id,
+                    status=GameSession.STATUS_COMPLETED,
+                    current_phase=next_state["phase"],
+                    turn_number=next_state["turn_number"],
+                    state_json=next_state,
+                    ended_at=timezone.now(),
+                )
+            else:
+                repo.update_session(
+                    session_id,
+                    current_phase=next_state["phase"],
+                    turn_number=next_state["turn_number"],
+                    state_json=next_state,
+                )
             broadcast_reason = "vote.resolved"
         else:
-            session.save(update_fields=["state_json", "updated_at"])
-
-        transaction.on_commit(
-            lambda session_id=session.id, reason=broadcast_reason: broadcast_session_event(
+            repo.update_session(
                 session_id,
-                reason,
+                state_json=state,
             )
-        )
 
-    return Response(load_session_snapshot(session.id, viewer_user_id=request.user.id))
+    post_write_broadcast(session_id, broadcast_reason)
+
+    return Response(load_session_snapshot(session_id, viewer_user_id=request.user.id))
 
 
 # --- Existing Single-Player Demo Session Views ---
@@ -821,25 +853,6 @@ def _get_accessible_template(template_id, user):
     return None
 
 
-def _get_session_for_user(session_id, user):
-    session = (
-        GameSession.objects.select_related("template", "host")
-        .prefetch_related("participants__user")
-        .filter(id=session_id)
-        .first()
-    )
-    if session is None:
-        return None
-
-    if session.host_id == user.id:
-        return session
-
-    if session.participants.filter(user_id=user.id).exists():
-        return session
-
-    return None
-
-
 def _ensure_unique_display_name(session, requested_name, fallback_name):
     base_name = (requested_name or fallback_name or "Player").strip()[:100]
     base_name = base_name or "Player"
@@ -861,3 +874,28 @@ def _ensure_unique_display_name(session, requested_name, fallback_name):
 def _get_next_seat_order(session):
     max_value = session.participants.aggregate(max_value=Max("seat_order"))["max_value"]
     return 0 if max_value is None else max_value + 1
+
+
+def _ensure_unique_display_name_via_repo(repo, session_id, requested_name, fallback_name):
+    """Repository-based version of _ensure_unique_display_name for refactored views."""
+    base_name = (requested_name or fallback_name or "Player").strip()[:100]
+    base_name = base_name or "Player"
+
+    if repo.check_unique_display_name(session_id, base_name):
+        return base_name
+
+    suffix = 2
+    while True:
+        candidate = f"{base_name[:96]}-{suffix}"
+        if repo.check_unique_display_name(session_id, candidate):
+            return candidate
+        suffix += 1
+
+
+def _get_next_seat_order_via_repo(repo, session_id):
+    """Repository-based version of _get_next_seat_order for refactored views."""
+    participants = repo.get_participants_for_session(session_id)
+    if not participants:
+        return 0
+    max_seat = max(p["seat_order"] for p in participants)
+    return max_seat + 1

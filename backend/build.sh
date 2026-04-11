@@ -6,6 +6,14 @@ set -o errexit
 # Install Python dependencies
 pip install -r requirements.txt
 
+# Validate MongoDB connectivity when migration mode is enabled.
+if [ "${USE_MONGODB}" = "True" ] || [ "${USE_MONGODB}" = "true" ]; then
+    echo "USE_MONGODB enabled. Validating MongoDB connectivity..."
+    python manage.py check_mongodb --require-replica-set
+    echo "Bootstrapping MongoDB indexes..."
+    python manage.py create_mongo_indexes
+fi
+
 # Build React frontend
 cd ../frontend
 npm install

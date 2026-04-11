@@ -21,6 +21,12 @@ from dotenv import load_dotenv
 load_dotenv(BASE_DIR / ".env")
 
 
+def _as_bool(value: str, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -28,13 +34,29 @@ load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-g7jh3n1ljs5*^e!vu9qdcj2woyks893lwom%&h7o@&fqkgvolz')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+DEBUG = _as_bool(os.getenv('DEBUG', 'False'))
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',')
+
+# MongoDB migration settings (foundation only).
+# The application still uses Django ORM + sqlite3 for runtime persistence until
+# the repository layer migration is implemented.
+USE_MONGODB = _as_bool(os.getenv('USE_MONGODB', 'False'))
+MONGODB_URI = os.getenv(
+    'MONGODB_URI',
+    'mongodb+srv://<db_username>:<db_password>@socialdeductiongameengi.fp9bqe.mongodb.net/',
+)
+MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'socialdeduction')
+MONGODB_REQUIRE_REPLICA_SET = _as_bool(os.getenv('MONGODB_REQUIRE_REPLICA_SET', 'True'))
+# Shadow-write mode: writes go to both ORM and MongoDB simultaneously.
+# Reads are always served from the ORM (relational is primary).
+# Mongo failures are logged but never block the relational write.
+# Enable this to validate MongoDB data parity before switching USE_MONGODB=True.
+USE_DUAL_WRITE = _as_bool(os.getenv('USE_DUAL_WRITE', 'False'))
 
 # Application definition
 

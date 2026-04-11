@@ -3,42 +3,37 @@ from typing import Optional
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
-from .models import GameParticipant, GameSession
+from db.repository import get_repository
 from .session_state import load_session_snapshot
 
 
 @database_sync_to_async
 def get_accessible_session(session_id: int, user_id: int):
-    try:
-        session = (
-            GameSession.objects.select_related("template", "host")
-            .get(id=session_id)
-        )
-    except GameSession.DoesNotExist:
+    """Return the session document if ``user_id`` is the host or a participant."""
+    repo = get_repository()
+    session_doc = repo.get_session_by_id(session_id)
+    if session_doc is None:
         return None
-
-    is_host = session.host_id == user_id
-    is_participant = session.participants.filter(user_id=user_id).exists()
-    if not is_host and not is_participant:
-        return None
-
-    return session
+    is_host = session_doc["host_user_id"] == user_id
+    if is_host:
+        return session_doc
+    participant = repo.get_participant_by_session_and_user(session_id, user_id)
+    return session_doc if participant is not None else None
 
 
 @database_sync_to_async
 def get_participant_id(session_id: int, user_id: int):
-    return (
-        GameParticipant.objects.filter(session_id=session_id, user_id=user_id)
-        .values_list("id", flat=True)
-        .first()
-    )
+    repo = get_repository()
+    participant = repo.get_participant_by_session_and_user(session_id, user_id)
+    return participant["_id"] if participant is not None else None
 
 
 @database_sync_to_async
 def set_participant_connection_state(participant_id: Optional[int], is_connected: bool):
     if participant_id is None:
         return
-    GameParticipant.objects.filter(id=participant_id).update(is_connected=is_connected)
+    repo = get_repository()
+    repo.update_participant(participant_id, is_connected=is_connected)
 
 
 @database_sync_to_async
