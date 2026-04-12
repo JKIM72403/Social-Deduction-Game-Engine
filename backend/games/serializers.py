@@ -104,7 +104,7 @@ class GameTemplateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GameTemplate
-        fields = ["id", "name", "min_players", "max_players", "is_public", "role_slots", "phases", "win_conditions", "creator_name", "creator_id"]
+        fields = ["id", "name", "min_players", "max_players", "is_public", "created_at", "role_slots", "phases", "win_conditions", "creator_name", "creator_id"]
 
     def get_creator_name(self, obj):
         return obj.creator.username if obj.creator else None
@@ -113,7 +113,7 @@ class GameTemplateSerializer(serializers.ModelSerializer):
         role_slots_data = validated_data.pop("role_slots", [])
         phases_data = validated_data.pop("phases", [])
         win_conditions_data = validated_data.pop("win_conditions", [])
-        
+
         game_template = GameTemplate.objects.create(**validated_data)
 
         for slot in role_slots_data:

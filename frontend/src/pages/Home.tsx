@@ -1,6 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { Box, Typography, Card, CardContent, CardActions, Button, CircularProgress } from "@mui/material";
+import {
+    Box, Typography, Card, CardContent, CardActions, Button, CircularProgress,
+    FormControl, InputLabel, Select, MenuItem,
+} from "@mui/material";
+import type { SelectChangeEvent } from "@mui/material";
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -17,9 +21,12 @@ type GameTemplate = {
     name: string;
     min_players: number;
     max_players: number;
+    created_at: string;
     creator_id: number | null;
     creator_name: string | null;
 };
+
+type SortOption = 'name-asc' | 'name-desc' | 'date-newest' | 'date-oldest' | 'players-asc' | 'players-desc';
 
 export default function Home() {
     const { user } = useAuth();
@@ -27,6 +34,7 @@ export default function Home() {
     const [games, setGames] = useState<GameTemplate[]>([]);
     const [loading, setLoading] = useState(true);
     const [creatingSessionFor, setCreatingSessionFor] = useState<number | null>(null);
+    const [sortBy, setSortBy] = useState<SortOption>('name-asc');
 
     const [deleteGame, setDeleteGame] = useState<GameTemplate | null>(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
@@ -42,6 +50,31 @@ export default function Home() {
                 setLoading(false);
             });
     }, []);
+
+    const sortedGames = useMemo(() => {
+        const sorted = [...games];
+        switch (sortBy) {
+            case 'name-asc':
+                sorted.sort((a, b) => a.name.localeCompare(b.name));
+                break;
+            case 'name-desc':
+                sorted.sort((a, b) => b.name.localeCompare(a.name));
+                break;
+            case 'date-newest':
+                sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                break;
+            case 'date-oldest':
+                sorted.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                break;
+            case 'players-asc':
+                sorted.sort((a, b) => a.max_players - b.max_players);
+                break;
+            case 'players-desc':
+                sorted.sort((a, b) => b.max_players - a.max_players);
+                break;
+        }
+        return sorted;
+    }, [games, sortBy]);
 
     const handleSnackbarClose = () => {
         setSnackbar(prev => ({ ...prev, open: false }));
@@ -95,11 +128,28 @@ export default function Home() {
                         Create and play solo or multiplayer social deduction games!
                     </Typography>
                 </Box>
-                {user && (
-                    <Button variant="outlined" color="secondary" component={RouterLink} to="/multiplayer">
-                        Join Lobby by Code
-                    </Button>
-                )}
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <FormControl size="small" sx={{ minWidth: 200 }}>
+                        <InputLabel>Sort By</InputLabel>
+                        <Select
+                            value={sortBy}
+                            label="Sort By"
+                            onChange={(e: SelectChangeEvent) => setSortBy(e.target.value as SortOption)}
+                        >
+                            <MenuItem value="name-asc">Name (A-Z)</MenuItem>
+                            <MenuItem value="name-desc">Name (Z-A)</MenuItem>
+                            <MenuItem value="date-newest">Newest First</MenuItem>
+                            <MenuItem value="date-oldest">Oldest First</MenuItem>
+                            <MenuItem value="players-asc">Max Players (Low-High)</MenuItem>
+                            <MenuItem value="players-desc">Max Players (High-Low)</MenuItem>
+                        </Select>
+                    </FormControl>
+                    {user && (
+                        <Button variant="outlined" color="secondary" component={RouterLink} to="/multiplayer">
+                            Join Lobby by Code
+                        </Button>
+                    )}
+                </Box>
             </Box>
 
             <Box sx={{ mt: 4 }}>
@@ -109,7 +159,7 @@ export default function Home() {
                     <Typography>No games found. Create one!</Typography>
                 ) : (
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 3 }}>
-                        {games.map((game) => (
+                        {sortedGames.map((game) => (
                             <Box key={game.id}>
                                 <Card elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                                     <CardContent sx={{ flexGrow: 1 }}>

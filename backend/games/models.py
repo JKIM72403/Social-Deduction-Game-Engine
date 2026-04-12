@@ -1,6 +1,6 @@
 import secrets
 import string
-
+from django.utils import timezone
 from django.conf import settings
 from django.db import models
 
@@ -65,6 +65,7 @@ class GameTemplate(models.Model):
     min_players = models.IntegerField()
     max_players = models.IntegerField()
     is_public = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
 
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -108,7 +109,7 @@ class WinConditionTemplate(models.Model):
     game_template = models.ForeignKey(GameTemplate, related_name="win_conditions", on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     winner_alignment = models.ForeignKey(Alignment, on_delete=models.SET(get_default_alignment), related_name="win_conditions")
-    
+
     # JSON structure: [{"type": "ROLE_COUNT", "target": role_id, "count": 0}, ...]
     criteria = models.JSONField(default=list)
     order = models.IntegerField(default=0)
@@ -180,7 +181,7 @@ class GameSession(models.Model):
     )
     turn_number = models.PositiveIntegerField(default=0)
     state_json = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
