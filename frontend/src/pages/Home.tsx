@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
     Box, Typography, Card, CardContent, CardActions, Button, CircularProgress,
-    FormControl, InputLabel, Select, MenuItem,
+    FormControl, InputLabel, Select, MenuItem, TextField,
 } from "@mui/material";
 import type { SelectChangeEvent } from "@mui/material";
 import Dialog from '@mui/material/Dialog';
@@ -35,6 +35,7 @@ export default function Home() {
     const [loading, setLoading] = useState(true);
     const [creatingSessionFor, setCreatingSessionFor] = useState<number | null>(null);
     const [sortBy, setSortBy] = useState<SortOption>('name-asc');
+    const [searchQuery, setSearchQuery] = useState('');
 
     const [deleteGame, setDeleteGame] = useState<GameTemplate | null>(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
@@ -52,7 +53,9 @@ export default function Home() {
     }, []);
 
     const sortedGames = useMemo(() => {
-        const sorted = [...games];
+        const query = searchQuery.toLowerCase();
+        const filtered = games.filter(g => g.name.toLowerCase().includes(query));
+        const sorted = [...filtered];
         switch (sortBy) {
             case 'name-asc':
                 sorted.sort((a, b) => a.name.localeCompare(b.name));
@@ -74,7 +77,7 @@ export default function Home() {
                 break;
         }
         return sorted;
-    }, [games, sortBy]);
+    }, [games, sortBy, searchQuery]);
 
     const handleSnackbarClose = () => {
         setSnackbar(prev => ({ ...prev, open: false }));
@@ -129,6 +132,13 @@ export default function Home() {
                     </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <TextField
+                        size="small"
+                        label="Search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        sx={{ minWidth: 200 }}
+                    />
                     <FormControl size="small" sx={{ minWidth: 200 }}>
                         <InputLabel>Sort By</InputLabel>
                         <Select
