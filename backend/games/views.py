@@ -88,7 +88,7 @@ def me_view(request):
 class AbilityTemplateViewSet(viewsets.ModelViewSet):
     queryset = AbilityTemplate.objects.all()
     serializer_class = AbilityTemplateSerializer
-    
+
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.is_default:
@@ -211,7 +211,7 @@ class GameTemplateViewSet(viewsets.ModelViewSet):
 @permission_classes([IsAuthenticated])
 def create_network_session(request):
     """Create a new multiplayer session.
-    
+
     Refactored to use Repository pattern (Phase 5).
     """
     repo = get_repository()
@@ -230,7 +230,7 @@ def create_network_session(request):
     with transaction.atomic():
         session_doc = repo.create_session(template.id, request.user.id)
         session_id = session_doc["_id"]
-        
+
         display_name = _ensure_unique_display_name_via_repo(
             repo,
             session_id,
@@ -251,7 +251,7 @@ def create_network_session(request):
 @permission_classes([IsAuthenticated])
 def join_network_session(request):
     """Join an existing session by join code.
-    
+
     Example of refactored view using the Repository abstraction instead of
     direct ORM calls. See Phase 3 doc for remaining view refactors.
     """
@@ -333,7 +333,7 @@ def network_session_snapshot(request, session_id):
 @permission_classes([IsAuthenticated])
 def set_network_session_ready(request, session_id):
     """Toggle participant ready state.
-    
+
     Refactored to use Repository pattern (Phase 5).
     """
     repo = get_repository()
@@ -424,7 +424,7 @@ def start_network_session(request, session_id):
             repo.update_participant(
                 participant_doc["_id"],
                 role_name=player.role.name,
-                role_alignment=player.role.alignment.value,
+                role_alignment=player.role.alignment,
                 is_alive=player.is_alive,
                 is_ready=False,
             )
@@ -696,7 +696,7 @@ def _get_bot_target(bot, engine, available_players, ability=None, is_vote=False)
                         # Failed to parse investigation result from log message
                         # This is not critical - bot will just lack this intel
                         logging.getLogger(__name__).debug(f"Bot intel parsing failed: {e}")
-    
+
     alive_targets = [p for p in available_players if p.name != bot.name]
     if not alive_targets:
         return bot
@@ -831,7 +831,7 @@ def game_session_action(request, session_id):
             human_alive = any(not p.name.startswith("Bot ") for p in alive_now)
             if human_alive:
                 break
-                
+
             _simulate_bots_for_phase(engine)
             engine.advance_phase()
 

@@ -36,7 +36,7 @@ class Command(BaseCommand):
             ("Ignite", "IGNITE", "NIGHT", "Ignite all doused players, killing them."),
             ("Mafia Kill", "IMMUNE_KILL", "NIGHT", "Kill as the Godfather with investigation immunity."),
         ]
-        
+
         ability_objs = {}
         for name, atype, phase, desc in abilities:
             obj, created = AbilityTemplate.objects.get_or_create(name=name)
@@ -93,8 +93,58 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'Created role: {name}'))
             else:
                 self.stdout.write(self.style.SUCCESS(f'Updated role to default: {name}'))
-            
+
             # Add abilities
             if name in role_ability_map:
                 for ab_name in role_ability_map[name]:
                     RoleAbility.objects.get_or_create(role=role, ability=ability_objs[ab_name])
+
+        # Default Game Template
+        from games.models import GameTemplate, GameRoleSlot, PhaseTemplate, WinConditionTemplate
+
+        template, created = GameTemplate.objects.get_or_create(
+            name="Classic Mafia",
+            defaults={
+                "min_players": 4,
+                "max_players": 12,
+                "is_public": True,
+            },
+        )
+
+        if created:
+            self.stdout.write(self.style.SUCCESS('Created default game template: Classic Mafia'))
+
+            # Role slots: 2 Villagers, 1 Doctor, 1 Sheriff, 1 Mafioso
+            role_map = {
+                "Villager": 2,
+                "Doctor": 1,
+                "Sheriff": 1,
+                "Mafioso": 1,
+            }
+            for role_name, count in role_map.items():
+                role = RoleTemplate.objects.get(name=role_name)
+                GameRoleSlot.objects.create(game_template=template, role=role, count=count)
+
+            # Phases
+            PhaseTemplate.objects.create(game_template=template, name="Night", phase_type="NIGHT", order=0)
+            PhaseTemplate.objects.create(game_template=template, name="Day", phase_type="DAY", order=1)
+            PhaseTemplate.objects.create(game_template=template, name="Voting", phase_type="VOTING", order=2)
+
+            # Win conditions
+            WinConditionTemplate.objects.create(
+                game_template=template,
+                name="Town Wins",
+                winner_alignment=alignment_objs["TOWN"],
+                criteria=[{"type": "ALIGNMENT_COUNT", "target": "MAFIA", "count": 0}],
+                order=0,
+            )
+            WinConditionTemplate.objects.create(
+                game_template=template,
+                name="Mafia Wins",
+                winner_alignment=alignment_objs["MAFIA"],
+                criteria=[{"type": "ALIGNMENT_COUNT", "target": "TOWN", "count": 0}],
+                order=1,
+            )
+        else:
+            self.stdout.write(self.style.SUCCESS('Default game template already exists, skipping'))
+
