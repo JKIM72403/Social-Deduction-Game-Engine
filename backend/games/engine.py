@@ -34,10 +34,11 @@ class Ability:
 class KillAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         if target.status_effects.get("protected"):
-            game.log(f"{target.name} was attacked but survived!", "protect", "all")
+            game.log("A kill attempt failed last night.", "protect", "all")
         else:
             target.is_alive = False
             game.log(f"{target.name} was killed!", "kill", "all")
+
 
 class ProtectAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
@@ -77,7 +78,7 @@ class DoubleVoteAbility(Ability):
 class RoleblockAbility(Ability):
     def __init__(self, name: str, priority: int = 0, phase: str = "NIGHT"):
         super().__init__(name, priority, phase)
-    
+
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         target.status_effects["roleblocked"] = True
         game.log(f"You roleblocked {target.name}!", "ability", [source.name])
@@ -85,7 +86,7 @@ class RoleblockAbility(Ability):
 class LookoutAbility(Ability):
     def __init__(self, name: str, priority: int = 10, phase: str = "NIGHT"):
         super().__init__(name, priority, phase)
-    
+
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         visitors = target.status_effects.get("visited_by", [])
         if visitors:
@@ -97,7 +98,7 @@ class LookoutAbility(Ability):
 class JailAbility(Ability):
     def __init__(self, name: str, priority: int = 0, phase: str = "NIGHT"):
         super().__init__(name, priority, phase)
-    
+
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         target.status_effects["jailed"] = True
         target.status_effects["roleblocked"] = True
@@ -108,7 +109,7 @@ class JailAbility(Ability):
 class DouseAbility(Ability):
     def __init__(self, name: str, priority: int = 5, phase: str = "NIGHT"):
         super().__init__(name, priority, phase)
-    
+
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         if not hasattr(game, 'doused_players'):
             game.doused_players = set()
@@ -119,26 +120,26 @@ class IgniteAbility(Ability):
     def __init__(self, name: str, priority: int = 5, phase: str = "NIGHT"):
         super().__init__(name, priority, phase)
         self.target_self = True
-    
+
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         if not hasattr(game, 'doused_players'):
             game.doused_players = set()
-        
+
         if not game.doused_players:
             game.log("No one was doused. The ignition fizzles.", "ability", [source.name])
             return
-        
+
         killed = []
         for player_name in list(game.doused_players):
             player = game.get_player(player_name)
             if player and player.is_alive and not player.status_effects.get("protected"):
                 player.is_alive = False
                 killed.append(player_name)
-        
+
         game.doused_players.clear()
         if killed:
             killed_str = ", ".join(killed)
-            game.log(f"The arsonist ignited their targets! {killed_str} burned!", "kill", "all")
+            game.log(f"{killed_str} went up in flames!", "kill", "all")
         else:
             game.log("The ignition failed - all targets were protected!", "ability", [source.name])
 
@@ -146,10 +147,10 @@ class ImmuneKillAbility(Ability):
     def __init__(self, name: str, priority: int = 5, phase: str = "NIGHT"):
         super().__init__(name, priority, phase)
         self.investigation_immune = True
-    
+
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         if target.status_effects.get("protected") or target.status_effects.get("jailed"):
-            game.log(f"{target.name} was attacked but survived!", "protect", "all")
+            game.log("A kill attempt failed last night.", "protect", "all")
         else:
             target.is_alive = False
             game.log(f"{target.name} was killed!", "kill", "all")
@@ -243,8 +244,7 @@ class VotingPhase(Phase):
         self.pending_actions = [] # Actions to manipulate votes before tallying
 
     def end(self):
-        # Resolve any vote-manipulating abilities first
-        self.game.log("Resolving vote manipulation abilities...", "system")
+        # Silently resolve any vote-manipulating abilities
         self.pending_actions.sort(key=lambda a: a.ability.priority)
         for action in self.pending_actions:
             if action.source.is_alive:
@@ -252,31 +252,26 @@ class VotingPhase(Phase):
 
         # Tally votes
         if not self.votes:
-            self.game.log("No votes cast.", "vote")
+            self.game.log("No votes were cast.", "vote")
             return
 
         counts = {}
-        missing_votes = 0
-        extra_votes = 0
 
         for voter_name, target in self.votes.items():
             voter = self.game.get_player(voter_name)
             if voter and voter.status_effects.get("vote_stolen"):
-                missing_votes += 1
                 continue
 
             vote_weight = 1
             if voter and voter.status_effects.get("double_vote"):
                 vote_weight = 2
-                extra_votes += 1
 
             counts[target] = counts.get(target, 0) + vote_weight
 
-        net_diff = extra_votes - missing_votes
-        if net_diff > 0:
-            self.game.log(f"{net_diff} extra vote(s) were counted!", "vote")
-        elif net_diff < 0:
-            self.game.log(f"{abs(net_diff)} vote(s) mysteriously went missing!", "vote")
+        # Show anonymous vote tally
+        sorted_counts = sorted(counts.items(), key=lambda x: -x[1])
+        tally_parts = [f"{name}: {count}" for name, count in sorted_counts]
+        self.game.log(f"Vote tally — {', '.join(tally_parts)}", "vote")
 
         # Find max
         max_votes = 0
@@ -305,7 +300,7 @@ class VotingPhase(Phase):
         if data.get("action") == "vote":
             target_name = data.get("target")
             self.votes[player_name] = target_name
-            self.game.log(f"{player_name} voted for {target_name}.", "vote")
+            self.game.log("Your vote has been submitted.", "vote", [player_name])
 
         # Also handle abilities if passed (e.g. Vote Steal, Double Vote)
         ability_idx = data.get("ability_index")
@@ -342,13 +337,13 @@ class NightPhase(Phase):
         for action in self.pending_actions:
             if not action.source.is_alive:
                 continue
-            
+
             # Track visits BEFORE checking blocks (for lookout to see blocked visitors)
             if action.target != action.source:  # Don't track self-visits
                 if "visited_by" not in action.target.status_effects:
                     action.target.status_effects["visited_by"] = []
                 action.target.status_effects["visited_by"].append(action.source)
-            
+
             # Jailed targets cannot be visited (except by jailor)
             if action.target.status_effects.get("jailed") and action.source != action.target:
                 jailed_by_source = False
@@ -359,7 +354,7 @@ class NightPhase(Phase):
                         break
                 if not jailed_by_source:
                     continue
-            
+
             # Check if source is roleblocked
             if action.ability.priority > 0 and action.source.status_effects.get("roleblocked"):
                 self.game.log("You were blocked and could not perform your action.", "ability", [action.source.name])
@@ -489,9 +484,9 @@ class GameEngine:
 
     def check_win_conditions(self):
         alive = self.get_alive_players()
-        
+
         # CHECK NEUTRAL WINS FIRST (higher priority than faction wins)
-        
+
         # Jester win: was lynched (eliminated during voting phase)
         if hasattr(self, 'last_lynched') and self.last_lynched:
             lynched_player = self.get_player(self.last_lynched)
@@ -500,21 +495,21 @@ class GameEngine:
                 self.phase_state = PhaseState.GAME_OVER
                 return
             self.last_lynched = None  # Reset after checking
-        
+
         # Serial Killer win: last one standing
         sk_alive = [p for p in alive if p.role.name == "Serial Killer"]
         if sk_alive and len(alive) == 1:
             self.log("SERIAL KILLER WINS! Only chaos remains.", "win")
             self.phase_state = PhaseState.GAME_OVER
             return
-        
+
         # Arsonist win: last one standing
         arso_alive = [p for p in alive if p.role.name == "Arsonist"]
         if arso_alive and len(alive) == 1:
             self.log("ARSONIST WINS! The town burns to ashes.", "win")
             self.phase_state = PhaseState.GAME_OVER
             return
-        
+
         # THEN CHECK ALIGNMENT-BASED WINS
 
         # If no win conditions defined, use default fallback
@@ -552,4 +547,3 @@ class GameEngine:
                 self.log(f"WIN CONDITION MET: {wc.get('name')}! {wc.get('winner_alignment')} Victory!", "win")
                 self.phase_state = PhaseState.GAME_OVER
                 return
-
