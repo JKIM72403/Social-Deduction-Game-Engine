@@ -17,9 +17,8 @@ export default function AppRoutes() {
                     <Route index element={<Home />} />
                     <Route path="login" element={<Login />} />
                     <Route path="signup" element={<Signup />} />
-                    <Route path="play-game/:id" element={<PlayGame />} />
-
                     <Route element={<ProtectedRoute />}>
+                        <Route path="play-game/:id" element={<PlayGame />} />
                         <Route path="multiplayer" element={<LobbyLanding />} />
                         <Route path="sessions/:sessionId" element={<SessionLobby />} />
                         <Route path="create-game" element={<GameEditor />} />

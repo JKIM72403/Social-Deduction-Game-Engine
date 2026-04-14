@@ -12,45 +12,48 @@ const Navbar = () => {
 
     const handleLogout = () => {
         logout();
-        navigate('/');
+        navigate('/login');
     };
 
     return (
-        <AppBar position="static" elevation={1}>
+        <AppBar position="static" elevation={0} sx={{ 
+            bgcolor: 'rgba(15, 23, 42, 0.85)', 
+            backdropFilter: 'blur(12px)',
+            borderBottom: '1px solid rgba(255,255,255,0.05)'
+        }}>
             <Toolbar>
                 <Typography
-                    variant="h6"
+                    variant="h5"
                     component={RouterLink}
                     to="/"
-                    sx={{ flexGrow: 1, textDecoration: 'none', color: 'inherit', fontWeight: 'bold' }}
+                    sx={{ flexGrow: 1, textDecoration: 'none', color: 'white', fontWeight: 800, letterSpacing: 1 }}
                 >
-                    Social Deduction Engine
+                    SDE
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                    <Button color="inherit" component={RouterLink} to="/">
-                        Home
-                    </Button>
+                <Box sx={{ display: 'flex', gap: { xs: 1, md: 3 }, alignItems: 'center' }}>
                     {user ? (
                         <>
-                            <Button color="inherit" component={RouterLink} to="/multiplayer">
-                                Join Lobby
+                            <Button component={RouterLink} to="/multiplayer" sx={{ color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>
+                                Multiplayer
                             </Button>
-                            <Button variant="contained" color="secondary" component={RouterLink} to="/create-game">
+                            <Button variant="outlined" component={RouterLink} to="/create-game" size="small" sx={{ borderColor: 'rgba(255,255,255,0.2)', color: 'white', borderRadius: 2 }}>
                                 Create Game
                             </Button>
-                            <Typography variant="body2" color="inherit" sx={{ fontWeight: 600 }}>
-                                {user.username}
-                            </Typography>
-                            <Button color="inherit" onClick={handleLogout}>
-                                Log Out
-                            </Button>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: { xs: 0, md: 2 } }}>
+                                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                                    {user.username}
+                                </Typography>
+                                <Button size="small" onClick={handleLogout} sx={{ color: 'rgba(255,255,255,0.4)', minWidth: 'auto', p: 1 }}>
+                                    Logout
+                                </Button>
+                            </Box>
                         </>
                     ) : (
                         <>
-                            <Button color="inherit" component={RouterLink} to="/login">
+                            <Button component={RouterLink} to="/login" sx={{ color: 'rgba(255,255,255,0.8)' }}>
                                 Log In
                             </Button>
-                            <Button variant="contained" color="secondary" component={RouterLink} to="/signup">
+                            <Button variant="contained" color="primary" component={RouterLink} to="/signup" sx={{ borderRadius: 2 }}>
                                 Sign Up
                             </Button>
                         </>

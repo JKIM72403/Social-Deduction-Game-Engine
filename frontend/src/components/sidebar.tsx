@@ -38,19 +38,19 @@ const SidebarSection = ({ title, droppableId, items, onItemClick, onAdd, isDragg
             alignItems: 'center',
             mb: 1,
             border: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'background.paper',
+            borderColor: 'rgba(255,255,255,0.1)',
+            bgcolor: 'rgba(255,255,255,0.05)',
             px: 1,
             py: 0.5,
             borderRadius: 1
         }}>
-            <Typography variant="subtitle2" fontWeight={600}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ color: 'white' }}>
                 {title}
             </Typography>
             {onAdd && (
                 <IconButton
                     size="small"
-                    sx={{ p: 0.5 }}
+                    sx={{ p: 0.5, color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
                     onClick={(e) => { e.stopPropagation(); onAdd(); }}
                 >
                     <AddIcon fontSize="small" />
@@ -80,15 +80,16 @@ const SidebarSection = ({ title, droppableId, items, onItemClick, onAdd, isDragg
                                         sx={{
                                             mb: 0.5,
                                             cursor: 'pointer',
-                                            bgcolor: snapshot.isDragging ? 'action.selected' : 'transparent',
-                                            '&:hover': { bgcolor: 'action.hover' },
+                                            bgcolor: snapshot.isDragging ? 'rgba(255,255,255,0.2)' : 'transparent',
+                                            '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
                                             display: 'flex',
                                             alignItems: 'center',
-                                            borderRadius: 1
+                                            borderRadius: 1,
+                                            color: 'white'
                                         }}
                                         onClick={() => onItemClick(item.id, item.index)}
                                     >
-                                        <Box {...provided.dragHandleProps} sx={{ display: 'flex', alignItems: 'center', ml: 1, color: 'text.disabled' }}>
+                                        <Box {...provided.dragHandleProps} sx={{ display: 'flex', alignItems: 'center', ml: 1, color: 'rgba(255,255,255,0.5)' }}>
                                             <DragIndicatorIcon sx={{ fontSize: 18 }} />
                                         </Box>
                                         <ListItemText
@@ -116,11 +117,13 @@ const SidebarSection = ({ title, droppableId, items, onItemClick, onAdd, isDragg
                         sx={{
                             mb: 0.5,
                             cursor: 'pointer',
-                            '&:hover': { bgcolor: 'action.hover' }
+                            '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+                            color: 'white',
+                            borderRadius: 1
                         }}
                         onClick={() => onItemClick(item.id, item.index)}
                     >
-                        <CircleIcon sx={{ fontSize: 6, color: 'text.secondary', mr: 1, ml: 1 }} />
+                        <CircleIcon sx={{ fontSize: 6, color: 'rgba(255,255,255,0.5)', mr: 1, ml: 1 }} />
                         <ListItemText
                             primary={item.label}
                             primaryTypographyProps={{ variant: 'body2', fontSize: '0.85rem' }}
@@ -130,7 +133,7 @@ const SidebarSection = ({ title, droppableId, items, onItemClick, onAdd, isDragg
             </List>
         )}
         {items.length === 0 && (
-            <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
+            <Typography variant="caption" sx={{ ml: 2, color: 'rgba(255,255,255,0.5)' }}>
                 No items
             </Typography>
         )}
@@ -165,9 +168,9 @@ const Sidebar = ({
     return (
         <Box sx={{
             width: 280,
-            bgcolor: 'background.default',
-            borderRight: '1px solid',
-            borderColor: 'divider',
+            bgcolor: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(12px)',
+            borderRight: '1px solid rgba(255,255,255,0.1)',
             p: 2,
             display: 'flex',
             flexDirection: 'column',

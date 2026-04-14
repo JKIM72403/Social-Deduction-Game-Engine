@@ -15,7 +15,7 @@ import { API } from '../services/api';
 import type { GameData, Phase, WinCondition, RoleSlot, RoleTemplate } from '../types';
 import type { Selection } from '../components/edit-panel';
 import { useNavigate, useParams } from 'react-router-dom';
-import { COLORS } from '../constants/colors';
+import bgImage from '../assets/mafia_bg.png';
 
 type GameTemplateAPIResponse = {
     id: number;
@@ -371,17 +371,28 @@ const GameEditor = () => {
 
     return (
         <Box sx={{
-            height: '100%',
+            height: '100vh',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            bgcolor: 'background.default',
-            flexGrow: 1
+            backgroundImage: `url(${bgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            position: 'relative',
+            '&::before': {
+                content: '""',
+                position: 'absolute',    
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(10, 15, 25, 0.55)', 
+                zIndex: 0
+            }
         }}>
             <Box sx={{
                 flex: 1,
                 display: 'flex',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                position: 'relative',
+                zIndex: 1
             }}>
                 <Sidebar
                     gameData={gameData}
@@ -410,24 +421,28 @@ const GameEditor = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     position: 'relative',
-                    background: `radial-gradient(circle at center, ${COLORS.BG_DARK_SECONDARY} 0%, ${COLORS.BG_DARK_PRIMARY} 100%)`,
                     flexDirection: 'column',
-                    gap: 2
+                    gap: 2,
+                    color: 'white'
                 }}>
-                    <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h4" color="text.primary" fontWeight={600}>
+                    <Box sx={{ textAlign: 'center', bgcolor: 'rgba(30, 41, 59, 0.6)', backdropFilter: 'blur(12px)', p: 4, borderRadius: 3, border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)' }}>
+                        <Typography variant="h3" fontWeight={800} sx={{ 
+                            background: 'linear-gradient(45deg, #f3f4f6, #9ca3af)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            mb: 2
+                        }}>
                             {gameData.name}
                         </Typography>
-                        <Typography variant="subtitle1" color="text.secondary">
+                        <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.8)' }}>
                             {gameData.min_players} - {gameData.max_players} Players
                         </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                        <Typography variant="body2" sx={{ mt: 1, color: 'rgba(255,255,255,0.6)' }}>
                             {gameData.role_slots.length} Roles Configured
                         </Typography>
                         <Typography
                             variant="body2"
-                            color={hasValidationErrors ? 'error.main' : 'text.secondary'}
-                            sx={{ mt: 0.5 }}
+                            sx={{ mt: 0.5, color: hasValidationErrors ? '#ef4444' : 'rgba(255,255,255,0.6)' }}
                         >
                             Total Role Slots: {totalRoleSlots}
                         </Typography>
