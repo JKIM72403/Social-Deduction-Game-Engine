@@ -43,18 +43,20 @@ const alignmentColors = {
 
 interface Props {
     existingSlots: RoleSlot[];
+    gameId?: number;
     onSelectRole: (role: RoleTemplate) => void;
     onCreateCustomRole: () => void;
     onCancel: () => void;
 }
 
-export default function RoleSelector({ existingSlots, onSelectRole, onCreateCustomRole, onCancel }: Props) {
+export default function RoleSelector({ existingSlots, gameId, onSelectRole, onCreateCustomRole, onCancel }: Props) {
     const [availableRoles, setAvailableRoles] = useState<RoleTemplate[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        API.get("/roles/")
+        const params = gameId ? { game_template: gameId } : undefined;
+        API.get("/roles/", { params })
             .then((res: { data: RoleTemplate[] }) => {
                 setAvailableRoles(res.data);
                 setLoading(false);
@@ -65,7 +67,7 @@ export default function RoleSelector({ existingSlots, onSelectRole, onCreateCust
                 setError("Failed to load roles. Please try again.");
                 setLoading(false);
             });
-    }, []);
+    }, [gameId]);
 
     const isRoleSelected = (roleId: number) => {
         return existingSlots.some(slot => slot.roleId === roleId);
@@ -158,9 +160,16 @@ export default function RoleSelector({ existingSlots, onSelectRole, onCreateCust
                 variant="outlined"
                 fullWidth
                 sx={{ mb: 3 }}
+                disabled={!gameId}
             >
                 + Create Custom Role
             </Button>
+
+            {!gameId && (
+                <Alert severity="info" sx={{ mb: 3 }}>
+                    Save this game once before adding custom roles. That keeps custom roles tied to this game only.
+                </Alert>
+            )}
 
             {uniqueAlignments.sort().map(align => renderRoleSection(align))}
 

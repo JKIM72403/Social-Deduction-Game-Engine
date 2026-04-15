@@ -12,17 +12,19 @@ import { API } from '../services/api';
 import type { Alignment } from '../types';
 
 interface AlignmentManagerProps {
+    gameId?: number;
     onCancel: () => void;
 }
 
-const AlignmentManager = ({ onCancel }: AlignmentManagerProps) => {
+const AlignmentManager = ({ gameId, onCancel }: AlignmentManagerProps) => {
     const [alignments, setAlignments] = useState<Alignment[]>([]);
     const [newName, setNewName] = useState('');
     const [loading, setLoading] = useState(false);
 
     const fetchAlignments = async () => {
         try {
-            const res = await API.get('/alignments/');
+            const params = gameId ? { game_template: gameId } : undefined;
+            const res = await API.get('/alignments/', { params });
             setAlignments(res.data);
         } catch (e) {
             console.error('Failed to fetch alignments', e);
@@ -31,13 +33,13 @@ const AlignmentManager = ({ onCancel }: AlignmentManagerProps) => {
 
     useEffect(() => {
         fetchAlignments();
-    }, []);
+    }, [gameId]);
 
     const handleCreate = async () => {
         if (!newName.trim()) return;
         setLoading(true);
         try {
-            await API.post('/alignments/', { name: newName.trim() });
+            await API.post('/alignments/', { name: newName.trim(), game_template: gameId });
             setNewName('');
             fetchAlignments();
         } catch (e) {
@@ -62,6 +64,11 @@ const AlignmentManager = ({ onCancel }: AlignmentManagerProps) => {
     return (
         <Box>
             <Typography variant="h6" sx={{ mb: 3 }}>Custom Alignments</Typography>
+            {!gameId && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Save this game once before adding custom alignments. That keeps them tied to this game only.
+                </Typography>
+            )}
             
             <Box sx={{ display: 'flex', gap: 1, mb: 4 }}>
                 <TextField
@@ -70,12 +77,12 @@ const AlignmentManager = ({ onCancel }: AlignmentManagerProps) => {
                     label="New Alignment Name"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    disabled={loading}
+                    disabled={loading || !gameId}
                 />
                 <Button 
                     variant="contained" 
                     onClick={handleCreate}
-                    disabled={loading || !newName.trim()}
+                    disabled={loading || !newName.trim() || !gameId}
                 >
                     Add
                 </Button>

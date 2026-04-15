@@ -5,8 +5,28 @@ from django.conf import settings
 from django.db import models
 
 class Alignment(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
     is_default = models.BooleanField(default=False)
+    game_template = models.ForeignKey(
+        "GameTemplate",
+        related_name="custom_alignments",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(game_template__isnull=True),
+                name="unique_global_alignment_name",
+            ),
+            models.UniqueConstraint(
+                fields=["game_template", "name"],
+                name="unique_template_alignment_name",
+            ),
+        ]
 
     def __str__(self):
         return self.name
@@ -47,6 +67,13 @@ class RoleTemplate(models.Model):
     alignment = models.ForeignKey(Alignment, on_delete=models.SET(get_default_alignment), related_name="roles")
     description = models.TextField(blank=True, default="")
     is_default = models.BooleanField(default=False)
+    game_template = models.ForeignKey(
+        "GameTemplate",
+        related_name="custom_roles",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
 
     def __str__(self):
         return self.name

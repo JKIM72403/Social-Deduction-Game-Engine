@@ -41,7 +41,8 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     useEffect(() => {
-        API.get("/alignments/").then(res => {
+        const params = gameId ? { game_template: gameId } : undefined;
+        API.get("/alignments/", { params }).then(res => {
             setAlignments(res.data);
             if (!initialData && !winConditionId && res.data.length > 0) {
                 const town = res.data.find((a: any) => a.name.toUpperCase() === 'TOWN');
@@ -61,7 +62,7 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
                 setWc(res.data);
             });
         }
-    }, [winConditionId, initialData]);
+    }, [gameId, winConditionId, initialData]);
 
     const submit = async () => {
         if (!gameId) {

@@ -17,6 +17,7 @@ import { COLORS } from '../constants/colors';
 
 interface Props {
     roleId?: number;
+    gameId?: number;
     onSave: (role: RoleTemplate, originalId?: number) => void;
     onCancel: () => void;
 }
@@ -38,7 +39,7 @@ const unselectedChipSx = {
     },
 };
 
-export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
+export default function RoleEditor({ roleId, gameId, onSave, onCancel }: Props) {
     const [abilities, setAbilities] = useState<AbilityTemplate[]>([]);
     const [alignments, setAlignments] = useState<any[]>([]);
     const [role, setRole] = useState({
@@ -56,7 +57,8 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
         API.get("/abilities/").then(res => setAbilities(res.data));
         
         // Fetch all alignments
-        API.get("/alignments/").then(res => {
+        const params = gameId ? { game_template: gameId } : undefined;
+        API.get("/alignments/", { params }).then(res => {
             setAlignments(res.data);
             if (!roleId && res.data.length > 0) {
                 // Default to Town if available
@@ -79,7 +81,7 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
                 });
             });
         }
-    }, [roleId]);
+    }, [roleId, gameId]);
 
     const toggleAbility = (id: number) => {
         setRole(r => ({
@@ -108,10 +110,11 @@ export default function RoleEditor({ roleId, onSave, onCancel }: Props) {
         try {
             let res;
             const originalId = roleId;
+            const payload = gameId ? { ...role, game_template: gameId } : role;
             if (roleId) {
-                res = await API.put(`/roles/${roleId}/`, role);
+                res = await API.put(`/roles/${roleId}/`, payload);
             } else {
-                res = await API.post("/roles/", role);
+                res = await API.post("/roles/", payload);
             }
             // Pass both the updated role and the original ID to handle cloning/migration
             onSave(res.data, originalId);

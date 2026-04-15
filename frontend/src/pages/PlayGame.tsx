@@ -256,6 +256,11 @@ export default function PlayGame() {
     const phaseGuidance = getPhaseGuidance(gameState);
     const alivePlayers = gameState.players.filter((p) => p.is_alive);
     const eliminatedPlayers = gameState.players.filter((p) => !p.is_alive);
+    const handleExitSoloGame = () => {
+        if (window.confirm("Exit this solo game? Your current run will be lost.")) {
+            navigate("/");
+        }
+    };
 
     return (
         <Box 
@@ -312,6 +317,14 @@ export default function PlayGame() {
                         <Typography variant="body2" fontWeight={600} sx={{ color: gameState.me.is_alive ? '#10b981' : '#ef4444' }}>
                             {gameState.me.is_alive ? "Alive" : "Dead"}
                         </Typography>
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={handleExitSoloGame}
+                            sx={{ mt: 1, color: 'white', borderColor: 'rgba(255,255,255,0.35)' }}
+                        >
+                            Exit Game
+                        </Button>
                     </Box>
                 </Paper>
 

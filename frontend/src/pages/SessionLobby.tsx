@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -19,6 +19,15 @@ import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import {
+  EmojiEventsRounded as WinIcon,
+  FlashOnRounded as AbilityIcon,
+  HowToVoteRounded as VoteIcon,
+  InfoOutlined as SystemIcon,
+  SearchRounded as InvestigateIcon,
+  ShieldOutlined as ProtectIcon,
+  WarningAmberRounded as KillIcon,
+} from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 import { getWebSocketSessionUrl } from "../services/api";
 import {
@@ -32,8 +41,106 @@ import {
 } from "../services/sessions";
 import type { SessionParticipant, SessionSnapshot, SessionSocketMessage } from "../types";
 import { formatLogMessage } from "../utils";
+import bgImage from "../assets/mafia_bg.png";
 
 type SocketStatus = "connecting" | "connected" | "disconnected";
+type SessionLogType =
+  | "phase_change"
+  | "kill"
+  | "protect"
+  | "investigate"
+  | "vote"
+  | "ability"
+  | "system"
+  | "win"
+  | string;
+
+type LogStyleProps = {
+  color: string;
+  bgcolor: string;
+  borderColor: string;
+  icon: React.ElementType;
+  fontWeight: number;
+};
+
+function getLogStyle(type: SessionLogType): LogStyleProps {
+  switch (type) {
+    case "kill":
+      return { color: "#fca5a5", bgcolor: "rgba(239, 68, 68, 0.15)", borderColor: "rgba(239, 68, 68, 0.6)", icon: KillIcon, fontWeight: 700 };
+    case "protect":
+      return { color: "#86efac", bgcolor: "rgba(34, 197, 94, 0.15)", borderColor: "rgba(34, 197, 94, 0.6)", icon: ProtectIcon, fontWeight: 500 };
+    case "investigate":
+      return { color: "#93c5fd", bgcolor: "rgba(56, 130, 246, 0.15)", borderColor: "rgba(56, 130, 246, 0.6)", icon: InvestigateIcon, fontWeight: 500 };
+    case "vote":
+      return { color: "#fdba74", bgcolor: "rgba(249, 115, 22, 0.1)", borderColor: "rgba(249, 115, 22, 0.4)", icon: VoteIcon, fontWeight: 400 };
+    case "ability":
+      return { color: "#d8b4fe", bgcolor: "rgba(168, 85, 247, 0.15)", borderColor: "rgba(168, 85, 247, 0.5)", icon: AbilityIcon, fontWeight: 500 };
+    case "win":
+      return { color: "#fde047", bgcolor: "rgba(234, 179, 8, 0.2)", borderColor: "rgba(234, 179, 8, 0.9)", icon: WinIcon, fontWeight: 800 };
+    case "phase_change":
+    case "system":
+    default:
+      return { color: "#cbd5e1", bgcolor: "rgba(255, 255, 255, 0.05)", borderColor: "rgba(255, 255, 255, 0.15)", icon: SystemIcon, fontWeight: 400 };
+  }
+}
+
+function getPhaseGuidance(snapshot: SessionSnapshot) {
+  if (snapshot.session.current_phase === "GAME_OVER" || snapshot.session.status === "COMPLETED") {
+    return {
+      title: "Match finished",
+      message: "Review the final logs. Everyone will return to the multiplayer lobby shortly.",
+      severity: "success" as const,
+    };
+  }
+
+  if (!snapshot.me?.is_alive) {
+    return {
+      title: "You are eliminated",
+      message: "You can still follow the logs and player list while the remaining players finish the match.",
+      severity: "info" as const,
+    };
+  }
+
+  if (snapshot.session.current_phase === "NIGHT") {
+    return snapshot.me.phase_abilities.length > 0
+      ? {
+          title: "Night phase",
+          message: "Choose one of your abilities and select a living target, then submit your action.",
+          severity: "info" as const,
+        }
+      : {
+          title: "Night phase",
+          message: "You do not have a night ability. Submit to skip and let the night resolve.",
+          severity: "info" as const,
+        };
+  }
+
+  if (snapshot.session.current_phase === "VOTING") {
+    return {
+      title: "Voting phase",
+      message: "Select one living player to vote for elimination this turn.",
+      severity: "warning" as const,
+    };
+  }
+
+  if (snapshot.session.current_phase === "DAY") {
+    return {
+      title: "Day phase",
+      message: "Review the latest events, discuss, and end the day when you are ready to proceed.",
+      severity: "info" as const,
+    };
+  }
+
+  return {
+    title: `Phase: ${snapshot.session.current_phase}`,
+    message: "Follow the action panel for the next available move.",
+    severity: "info" as const,
+  };
+}
+
+function normalizeWinner(value?: string | null) {
+  return (value || "").trim().toUpperCase();
+}
 
 function getParticipantStatus(
   participant: SessionParticipant,
@@ -87,6 +194,7 @@ export default function SessionLobby() {
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [selectedAbilityIndex, setSelectedAbilityIndex] = useState<number>(-1);
   const [selectedAbilityTargetId, setSelectedAbilityTargetId] = useState<number>(0);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!Number.isFinite(numericSessionId)) {
@@ -154,8 +262,38 @@ export default function SessionLobby() {
     };
   }, [numericSessionId]);
 
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [snapshot?.state.logs?.length]);
+
+  useEffect(() => {
+    if (
+      snapshot?.session.status !== "COMPLETED" &&
+      snapshot?.session.current_phase !== "GAME_OVER"
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      navigate("/multiplayer");
+    }, 8000);
+
+    return () => window.clearTimeout(timer);
+  }, [navigate, snapshot?.session.current_phase, snapshot?.session.status]);
+
   const me = snapshot?.me ?? null;
   const isHost = snapshot?.session.host_user_id === user?.id;
+  const handleLeaveSession = () => {
+    if (isHost) {
+      window.alert("You cannot leave because you are the host.");
+      return;
+    }
+
+    const label = snapshot?.session.status === "LOBBY" ? "lobby" : "match";
+    if (window.confirm(`Leave this ${label}?`)) {
+      navigate("/multiplayer");
+    }
+  };
   const submittedParticipantIds =
     snapshot?.state.vote_state?.submitted_participant_ids ?? [];
   const aliveParticipants = useMemo(
@@ -391,6 +529,379 @@ export default function SessionLobby() {
   const liveVoteState = snapshot.state.vote_state;
   const lastResult = liveVoteState?.last_result;
 
+  if (snapshot.session.status !== "LOBBY") {
+    const phaseGuidance = getPhaseGuidance(snapshot);
+    const logs = snapshot.state.logs || [];
+    const visiblePlayers =
+      snapshot.state.players && snapshot.state.players.length > 0
+        ? snapshot.state.players
+        : snapshot.participants.map((participant) => ({
+            participant_id: participant.id,
+            display_name: participant.display_name,
+            is_alive: participant.is_alive,
+            role_name: participant.role_name,
+            role_alignment: participant.role_alignment,
+          }));
+    const alivePlayers = visiblePlayers.filter((player) => player.is_alive);
+    const eliminatedPlayers = visiblePlayers.filter((player) => !player.is_alive);
+    const winner = normalizeWinner(snapshot.state.winner);
+    const myAlignment = normalizeWinner(me?.role_alignment);
+    const hasMatchEnded =
+      snapshot.session.status === "COMPLETED" ||
+      snapshot.session.current_phase === "GAME_OVER";
+    const didWin = Boolean(
+      winner &&
+        myAlignment &&
+        (winner === myAlignment || winner.includes(myAlignment)),
+    );
+    const resultTitle = winner
+      ? didWin
+        ? "Victory"
+        : "Defeat"
+      : "Match Complete";
+    const resultColor = !winner ? "#fde047" : didWin ? "#10b981" : "#f87171";
+
+    return (
+      <Box
+        sx={{
+          height: "100%",
+          overflow: "hidden",
+          backgroundImage: `url(${bgImage})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundAttachment: "fixed",
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(10, 15, 25, 0.55)",
+            zIndex: 0,
+          },
+        }}
+      >
+        <Box sx={{ position: "relative", zIndex: 1, p: { xs: 2, lg: 3 }, width: "100%", maxWidth: 1600, mx: "auto", display: "flex", flexDirection: "column", flexGrow: 1, overflow: "hidden" }}>
+          <Paper
+            sx={{
+              p: 3,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              bgcolor: "rgba(30, 41, 59, 0.6)",
+              backdropFilter: "blur(12px)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5)",
+              borderRadius: 3,
+              mb: 3,
+              gap: 2,
+            }}
+          >
+            <Box>
+              <Typography variant="overline" sx={{ color: "#93c5fd", fontWeight: 700 }}>
+                {snapshot.session.template_name}
+              </Typography>
+              <Typography
+                variant="h4"
+                fontWeight={800}
+                sx={{
+                  background: "linear-gradient(45deg, #f3f4f6, #9ca3af)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                }}
+              >
+                {hasMatchEnded
+                  ? "Game Over"
+                  : `${snapshot.session.current_phase === "VOTING" ? "Voting" : snapshot.session.current_phase === "NIGHT" ? "Night" : snapshot.session.current_phase === "DAY" ? "Day" : snapshot.session.current_phase} - Turn ${snapshot.session.turn_number}`}
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: "right" }}>
+              <Typography variant="h6" color="white" fontWeight={700}>
+                {me?.display_name || user?.username || "Player"}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
+                {me?.role_name || "Role hidden"} {me?.role_alignment ? `(${me.role_alignment})` : ""}
+              </Typography>
+              <Typography variant="body2" fontWeight={600} sx={{ color: me?.is_alive ? "#10b981" : "#ef4444" }}>
+                {me?.is_alive ? "Alive" : "Eliminated"}
+              </Typography>
+              {!hasMatchEnded && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleLeaveSession}
+                  sx={{ mt: 1, color: "white", borderColor: "rgba(255,255,255,0.35)" }}
+                >
+                  Leave Match
+                </Button>
+              )}
+            </Box>
+          </Paper>
+
+          <Alert
+            severity={phaseGuidance.severity}
+            sx={{
+              mb: 3,
+              bgcolor: "rgba(15, 23, 42, 0.8)",
+              backdropFilter: "blur(10px)",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 2,
+              "& .MuiAlert-icon": { color: phaseGuidance.severity === "info" ? "#60a5fa" : undefined },
+            }}
+          >
+            <Typography variant="subtitle2" fontWeight={700}>{phaseGuidance.title}</Typography>
+            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)" }}>{phaseGuidance.message}</Typography>
+          </Alert>
+
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr 1.25fr" }, gap: 3, flexGrow: 1, minHeight: 0, overflow: "hidden", pb: 2 }}>
+            <Card sx={{ display: "flex", flexDirection: "column", bgcolor: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.1)", color: "white", borderRadius: 3, height: "100%", overflow: "hidden" }}>
+              <CardContent sx={{ flexGrow: 1, overflowY: "auto", p: 3, "&::-webkit-scrollbar": { width: "8px" }, "&::-webkit-scrollbar-thumb": { bgcolor: "rgba(255,255,255,0.2)", borderRadius: "4px" } }}>
+                <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: "#60a5fa" }}>
+                  Game Logs
+                </Typography>
+                <Divider sx={{ mb: 2, borderColor: "rgba(255,255,255,0.1)" }} />
+                <List disablePadding>
+                  {logs.map((log, index) => {
+                    if (log.type === "phase_change") {
+                      return (
+                        <Box key={index} sx={{ my: 3, position: "relative" }}>
+                          <Divider sx={{ "&::before, &::after": { borderColor: "rgba(255,255,255,0.2)" } }}>
+                            <Box sx={{ bgcolor: "rgba(15, 23, 42, 0.9)", border: "1px solid rgba(255,255,255,0.2)", px: 2, py: 0.5, borderRadius: 5, backdropFilter: "blur(4px)" }}>
+                              <Typography variant="caption" sx={{ color: "#e2e8f0", fontWeight: 800, letterSpacing: 2, textTransform: "uppercase" }}>
+                                {log.message}
+                              </Typography>
+                            </Box>
+                          </Divider>
+                        </Box>
+                      );
+                    }
+                    const style = getLogStyle(log.type);
+                    const IconComponent = style.icon;
+                    return (
+                      <Box key={index} sx={{ mb: 1.5, p: 1.5, borderRadius: 2, bgcolor: style.bgcolor, borderLeft: "4px solid", borderLeftColor: style.borderColor, borderTop: "1px solid rgba(255,255,255,0.05)", borderRight: "1px solid rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "flex-start", gap: 1.5 }}>
+                        <IconComponent sx={{ color: style.color, fontSize: 20, mt: 0.2 }} />
+                        <Typography variant="body2" sx={{ color: style.color, fontWeight: style.fontWeight, lineHeight: 1.5, wordBreak: "break-word" }}>
+                          {formatLogMessage(log.message, me?.display_name)}
+                        </Typography>
+                      </Box>
+                    );
+                  })}
+                  <div ref={logsEndRef} />
+                </List>
+              </CardContent>
+            </Card>
+
+            <Card sx={{ display: "flex", flexDirection: "column", bgcolor: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.1)", color: "white", borderRadius: 3, height: "100%", overflow: "hidden" }}>
+              <CardContent sx={{ flexGrow: 1, overflowY: "auto", p: 3, "&::-webkit-scrollbar": { width: "8px" }, "&::-webkit-scrollbar-thumb": { bgcolor: "rgba(255,255,255,0.2)", borderRadius: "4px" } }}>
+                <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: "#60a5fa" }}>
+                  Players
+                </Typography>
+                <Divider sx={{ mb: 2, borderColor: "rgba(255,255,255,0.1)" }} />
+                <Typography variant="subtitle2" sx={{ color: "#10b981", mb: 1 }}>
+                  Alive ({alivePlayers.length})
+                </Typography>
+                <List disablePadding sx={{ mb: eliminatedPlayers.length > 0 ? 2 : 0 }}>
+                  {alivePlayers.map((player) => (
+                    <ListItem key={player.participant_id} disablePadding sx={{ mb: 1, bgcolor: "rgba(255,255,255,0.03)", p: 1, borderRadius: 2 }}>
+                      <ListItemText
+                        primary={player.participant_id === me?.participant_id ? `${player.display_name} (You)` : player.display_name}
+                        secondary={player.role_name || undefined}
+                        primaryTypographyProps={{
+                          fontWeight: player.participant_id === me?.participant_id ? 700 : 400,
+                          color: player.participant_id === me?.participant_id ? "#60a5fa" : "white",
+                        }}
+                        secondaryTypographyProps={{ color: "#10b981" }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+
+                {eliminatedPlayers.length > 0 && (
+                  <>
+                    <Typography variant="subtitle2" sx={{ color: "#ef4444", mb: 1 }}>
+                      Eliminated ({eliminatedPlayers.length})
+                    </Typography>
+                    <List disablePadding>
+                      {eliminatedPlayers.map((player) => (
+                        <ListItem key={player.participant_id} disablePadding sx={{ mb: 1, bgcolor: "rgba(0,0,0,0.2)", p: 1, borderRadius: 2 }}>
+                          <ListItemText
+                            primary={player.participant_id === me?.participant_id ? `${player.display_name} (You)` : player.display_name}
+                            secondary={player.role_name || undefined}
+                            sx={{ textDecoration: "line-through", color: "rgba(255,255,255,0.4)" }}
+                            primaryTypographyProps={{ fontWeight: player.participant_id === me?.participant_id ? 700 : 400 }}
+                            secondaryTypographyProps={{ color: "#ef4444" }}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+              <Paper sx={{ p: 3, bgcolor: hasMatchEnded ? "rgba(16, 185, 129, 0.18)" : "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(12px)", border: hasMatchEnded ? "1px solid rgba(16, 185, 129, 0.45)" : "1px solid rgba(255,255,255,0.1)", color: "white", borderRadius: 3, flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+                <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: "#60a5fa" }}>
+                  Command Center
+                </Typography>
+                <Divider sx={{ mb: 3, borderColor: "rgba(255,255,255,0.1)" }} />
+
+                {hasMatchEnded ? (
+                  <Box sx={{ textAlign: "center", p: 4, flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                    <Typography variant="h3" fontWeight={800} gutterBottom sx={{ color: resultColor }}>
+                      {resultTitle}
+                    </Typography>
+                    <Typography sx={{ mb: 1, color: "rgba(255,255,255,0.85)" }}>
+                      {winner ? `${winner} wins.` : "The match has ended."}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 4, color: "rgba(255,255,255,0.7)" }}>
+                      Returning everyone to the multiplayer lobby in a few seconds.
+                    </Typography>
+                    <Button variant="contained" onClick={() => navigate("/multiplayer")} sx={{ bgcolor: "#10b981", "&:hover": { bgcolor: "#059669" }, alignSelf: "center", px: 4, py: 1.5 }}>
+                      Return to Lobby
+                    </Button>
+                  </Box>
+                ) : !me?.is_alive ? (
+                  <Box sx={{ textAlign: "center", p: 4, bgcolor: "rgba(0,0,0,0.3)", borderRadius: 2 }}>
+                    <Typography sx={{ color: "rgba(255,255,255,0.7)" }}>
+                      You are eliminated. Wait for the match to finish.
+                    </Typography>
+                  </Box>
+                ) : snapshot.session.current_phase === "VOTING" && hasSubmittedVote ? (
+                  <Alert severity="success" sx={{ bgcolor: "rgba(16, 185, 129, 0.15)", color: "white", border: "1px solid rgba(16, 185, 129, 0.4)" }}>
+                    Your vote is locked in. Waiting for the rest of the living players to finish this round.
+                  </Alert>
+                ) : snapshot.session.current_phase === "VOTING" ? (
+                  <Stack spacing={2}>
+                    {me.phase_abilities.length > 0 && !me.has_submitted_ability && (
+                      <Box sx={{ p: 3, border: "1px solid rgba(59, 130, 246, 0.5)", borderRadius: 3, bgcolor: "rgba(59, 130, 246, 0.05)" }}>
+                        <Typography variant="h6" gutterBottom sx={{ color: "#60a5fa" }}>
+                          Phase 1: Vote Manipulation
+                        </Typography>
+                        <Typography variant="body2" sx={{ mb: 3, color: "rgba(255,255,255,0.7)" }}>
+                          Select an ability to use before final voting begins. You can only use one ability per voting round.
+                        </Typography>
+                        <Stack spacing={2}>
+                          <FormControl fullWidth>
+                            <Select value={selectedAbilityIndex < 0 ? "" : selectedAbilityIndex} onChange={(event) => setSelectedAbilityIndex(Number(event.target.value))} disabled={actionSubmitting} sx={{ color: "white", "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" }, "& .MuiSvgIcon-root": { color: "white" } }}>
+                              {me.phase_abilities.map((ability) => (
+                                <MenuItem key={ability.index} value={ability.index}>{ability.name}</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                          <FormControl fullWidth>
+                            <Select value={selectedAbilityTargetId || ""} displayEmpty onChange={(event) => setSelectedAbilityTargetId(Number(event.target.value))} disabled={actionSubmitting || availableAbilityTargets.length === 0} sx={{ color: "white", "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" }, "& .MuiSvgIcon-root": { color: "white" } }}>
+                              <MenuItem value="" disabled>Select Target</MenuItem>
+                              {availableAbilityTargets.map((participant) => (
+                                <MenuItem key={participant.id} value={participant.id}>{participant.display_name}</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                          <Button variant="contained" onClick={handleSubmitAbility} disabled={actionSubmitting || selectedAbilityIndex < 0 || !selectedAbilityTargetId} sx={{ bgcolor: "#3b82f6", "&:hover": { bgcolor: "#2563eb" } }}>
+                            {actionSubmitting ? "Submitting..." : "Use Ability"}
+                          </Button>
+                        </Stack>
+                      </Box>
+                    )}
+                    <Box sx={{ p: 3, border: "1px solid rgba(239, 68, 68, 0.5)", borderRadius: 3, bgcolor: "rgba(239, 68, 68, 0.05)" }}>
+                      <Typography variant="h6" gutterBottom sx={{ color: "#f87171" }}>
+                        Final Vote
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)", mb: 3 }}>
+                        Cast your final vote for elimination.
+                      </Typography>
+                      <Stack spacing={3}>
+                        <FormControl fullWidth>
+                          <Select value={selectedVoteTargetId || ""} displayEmpty onChange={(event) => setSelectedVoteTargetId(Number(event.target.value))} disabled={voteSubmitting || availableVoteTargets.length === 0} sx={{ color: "white", "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" }, "& .MuiSvgIcon-root": { color: "white" } }}>
+                            <MenuItem value="" disabled>Select Target</MenuItem>
+                            {availableVoteTargets.map((participant) => (
+                              <MenuItem key={participant.id} value={participant.id}>{participant.display_name}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <Button variant="contained" onClick={handleSubmitVote} disabled={voteSubmitting || availableVoteTargets.length === 0 || !selectedVoteTargetId} sx={{ bgcolor: "#ef4444", "&:hover": { bgcolor: "#dc2626" } }}>
+                          {voteSubmitting ? "Submitting..." : "Confirm Vote"}
+                        </Button>
+                      </Stack>
+                    </Box>
+                  </Stack>
+                ) : me.has_submitted_action ? (
+                  <Alert severity="success" sx={{ bgcolor: "rgba(16, 185, 129, 0.15)", color: "white", border: "1px solid rgba(16, 185, 129, 0.4)" }}>
+                    Your action is locked in. Waiting for the rest of the living players to finish this phase.
+                  </Alert>
+                ) : (
+                  <Stack spacing={2}>
+                    <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
+                      {me.phase_abilities.length > 0
+                        ? "Choose an ability target, or skip if you have no action to take."
+                        : "You have no action for this phase. Mark yourself ready to continue."}
+                    </Typography>
+                    {me.phase_abilities.length > 0 && (
+                      <>
+                        <FormControl fullWidth>
+                          <Select value={selectedAbilityIndex < 0 ? "" : selectedAbilityIndex} onChange={(event) => setSelectedAbilityIndex(Number(event.target.value))} disabled={actionSubmitting} sx={{ color: "white", "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" }, "& .MuiSvgIcon-root": { color: "white" } }}>
+                            {me.phase_abilities.map((ability) => (
+                              <MenuItem key={ability.index} value={ability.index}>{ability.name}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <FormControl fullWidth>
+                          <Select value={selectedAbilityTargetId || ""} displayEmpty onChange={(event) => setSelectedAbilityTargetId(Number(event.target.value))} disabled={actionSubmitting || availableAbilityTargets.length === 0} sx={{ color: "white", "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" }, "& .MuiSvgIcon-root": { color: "white" } }}>
+                            <MenuItem value="" disabled>Select Target</MenuItem>
+                            {availableAbilityTargets.map((participant) => (
+                              <MenuItem key={participant.id} value={participant.id}>{participant.display_name}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <Button variant="contained" onClick={handleSubmitAbility} disabled={actionSubmitting || selectedAbilityIndex < 0 || !selectedAbilityTargetId} sx={{ bgcolor: "#10b981", "&:hover": { bgcolor: "#059669" } }}>
+                          {actionSubmitting ? "Submitting..." : "Lock In Action"}
+                        </Button>
+                      </>
+                    )}
+                    <Button variant={me.phase_abilities.length > 0 ? "outlined" : "contained"} onClick={handleSkipAction} disabled={actionSubmitting}>
+                      {actionSubmitting ? "Submitting..." : "Skip Action"}
+                    </Button>
+                    {isHost && snapshot.session.current_phase === "DAY" && (
+                      <Button variant="text" onClick={handleHostAdvance} disabled={actionSubmitting} sx={{ color: "#fbbf24" }}>
+                        Advance Day
+                      </Button>
+                    )}
+                  </Stack>
+                )}
+              </Paper>
+            </Box>
+          </Box>
+        </Box>
+
+        <Snackbar
+          open={Boolean(actionError || actionNotice)}
+          autoHideDuration={4000}
+          onClose={() => {
+            setActionError(null);
+            setActionNotice(null);
+          }}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert
+            severity={actionError ? "error" : "success"}
+            onClose={() => {
+              setActionError(null);
+              setActionNotice(null);
+            }}
+            sx={{ width: "100%", borderRadius: 2, boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}
+          >
+            {actionError || actionNotice}
+          </Alert>
+        </Snackbar>
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
@@ -593,8 +1104,8 @@ export default function SessionLobby() {
                     </Button>
                   )}
 
-                  <Button variant="text" onClick={() => navigate("/multiplayer")}>
-                    Join Another Lobby
+                  <Button variant="text" onClick={handleLeaveSession}>
+                    Leave Lobby
                   </Button>
                 </Stack>
               </CardContent>

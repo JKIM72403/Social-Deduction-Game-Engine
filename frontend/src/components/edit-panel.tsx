@@ -138,6 +138,7 @@ const EditPanel = ({
             <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <RoleSelector
                     existingSlots={gameData.role_slots}
+                    gameId={gameData.id}
                     onSelectRole={onSaveRole}
                     onCreateCustomRole={onSwitchToCustomRoleEditor}
                     onCancel={onCancel}
@@ -149,7 +150,7 @@ const EditPanel = ({
     if (selection.type === 'CREATE_CUSTOM_ROLE') {
         return (
             <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
-                <RoleEditor onSave={onSaveRole} onCancel={onCancel} />
+                <RoleEditor gameId={gameData.id} onSave={onSaveRole} onCancel={onCancel} />
             </Box>
         );
     }
@@ -159,6 +160,7 @@ const EditPanel = ({
             <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <RoleEditor
                     roleId={selection.id}
+                    gameId={gameData.id}
                     onSave={(updatedRole, originalId) => {
                         onSaveRole(updatedRole, originalId);
                     }}
@@ -171,7 +173,7 @@ const EditPanel = ({
     if (selection.type === 'ALIGNMENT_MANAGER') {
         return (
             <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
-                <AlignmentManager onCancel={onCancel} />
+                <AlignmentManager gameId={gameData.id} onCancel={onCancel} />
             </Box>
         );
     }

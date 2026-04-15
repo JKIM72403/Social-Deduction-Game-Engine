@@ -118,6 +118,115 @@ class GameSessionModelTests(TestCase):
         self.assertEqual(action.payload["target"], "Player B")
 
 
+class TemplateScopedCustomizationApiTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="scope_owner", password="pw")
+        self.other_owner = User.objects.create_user(username="other_scope_owner", password="pw")
+        self.owner_client = APIClient()
+        self.owner_client.force_authenticate(user=self.owner)
+
+        self.template = GameTemplate.objects.create(
+            name="Owner Template",
+            min_players=2,
+            max_players=6,
+            creator=self.owner,
+        )
+        self.other_template = GameTemplate.objects.create(
+            name="Other Template",
+            min_players=2,
+            max_players=6,
+            creator=self.other_owner,
+        )
+        self.town = Alignment.objects.create(name="Town", is_default=True)
+        self.default_role = RoleTemplate.objects.create(
+            name="Villager",
+            alignment=self.town,
+            description="Default town role.",
+            is_default=True,
+        )
+        self.owner_alignment = Alignment.objects.create(
+            name="Cult",
+            game_template=self.template,
+        )
+        self.other_alignment = Alignment.objects.create(
+            name="Aliens",
+            game_template=self.other_template,
+        )
+        self.owner_role = RoleTemplate.objects.create(
+            name="Cultist",
+            alignment=self.owner_alignment,
+            game_template=self.template,
+        )
+        self.other_role = RoleTemplate.objects.create(
+            name="Alien",
+            alignment=self.other_alignment,
+            game_template=self.other_template,
+        )
+
+    def test_role_and_alignment_lists_are_scoped_to_requested_template(self):
+        roles_response = self.owner_client.get(
+            "/api/roles/",
+            {"game_template": self.template.id},
+        )
+        alignments_response = self.owner_client.get(
+            "/api/alignments/",
+            {"game_template": self.template.id},
+        )
+
+        self.assertEqual(roles_response.status_code, 200)
+        self.assertEqual(alignments_response.status_code, 200)
+
+        role_names = {role["name"] for role in roles_response.data}
+        alignment_names = {alignment["name"] for alignment in alignments_response.data}
+
+        self.assertIn(self.default_role.name, role_names)
+        self.assertIn(self.owner_role.name, role_names)
+        self.assertNotIn(self.other_role.name, role_names)
+
+        self.assertIn(self.town.name, alignment_names)
+        self.assertIn(self.owner_alignment.name, alignment_names)
+        self.assertNotIn(self.other_alignment.name, alignment_names)
+
+    def test_custom_role_writes_require_owned_template_scope(self):
+        missing_scope_response = self.owner_client.post(
+            "/api/roles/",
+            {
+                "name": "Global Leak",
+                "alignment": self.town.id,
+                "description": "",
+                "abilities": [],
+            },
+            format="json",
+        )
+        other_scope_response = self.owner_client.post(
+            "/api/roles/",
+            {
+                "name": "Other Leak",
+                "alignment": self.town.id,
+                "description": "",
+                "abilities": [],
+                "game_template": self.other_template.id,
+            },
+            format="json",
+        )
+        owned_scope_response = self.owner_client.post(
+            "/api/roles/",
+            {
+                "name": "Scoped Role",
+                "alignment": self.town.id,
+                "description": "",
+                "abilities": [],
+                "game_template": self.template.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(missing_scope_response.status_code, 400)
+        self.assertEqual(other_scope_response.status_code, 403)
+        self.assertEqual(owned_scope_response.status_code, 201)
+        self.assertEqual(owned_scope_response.data["game_template"], self.template.id)
+
+
 class NetworkSessionApiTests(TestCase):
     def setUp(self):
         self.host = User.objects.create_user(

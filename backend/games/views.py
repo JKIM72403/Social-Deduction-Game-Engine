@@ -123,8 +123,56 @@ class RoleTemplateViewSet(viewsets.ModelViewSet):
     queryset = RoleTemplate.objects.all()
     serializer_class = RoleTemplateSerializer
 
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = RoleTemplate.objects.select_related("alignment", "game_template").prefetch_related("abilities__ability")
+        if self.action != "list":
+            return queryset
+        template_id = self.request.query_params.get("game_template")
+        if template_id:
+            return queryset.filter(Q(is_default=True) | Q(game_template_id=template_id)).distinct()
+        return queryset.filter(is_default=True)
+
+    def _ensure_owned_template_scope(self, data):
+        template_id = data.get("game_template")
+        if not template_id:
+            return Response(
+                {"error": "Custom roles must belong to a game template"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            template = GameTemplate.objects.get(id=template_id)
+        except GameTemplate.DoesNotExist:
+            return Response({"error": "Game template not found"}, status=status.HTTP_404_NOT_FOUND)
+        if template.creator_id != self.request.user.id:
+            return Response({"error": "Not the owner"}, status=status.HTTP_403_FORBIDDEN)
+        return None
+
+    def _ensure_instance_owner(self, instance):
+        if instance.is_default:
+            return None
+        if instance.game_template_id and instance.game_template.creator_id == self.request.user.id:
+            return None
+        return Response({"error": "Not the owner"}, status=status.HTTP_403_FORBIDDEN)
+
+    def create(self, request, *args, **kwargs):
+        scope_error = self._ensure_owned_template_scope(request.data)
+        if scope_error:
+            return scope_error
+        return super().create(request, *args, **kwargs)
+
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        scope_error = self._ensure_owned_template_scope(request.data)
+        if scope_error:
+            return scope_error
         if instance.is_default:
             # Clone instead of update
             serializer = self.get_serializer(data=request.data)
@@ -135,6 +183,12 @@ class RoleTemplateViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        scope_error = self._ensure_owned_template_scope(request.data)
+        if scope_error:
+            return scope_error
         if instance.is_default:
             # Combine instance data with partial updates
             data = self.get_serializer(instance).data
@@ -150,6 +204,9 @@ class RoleTemplateViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.is_default:
             return Response({"error": "Cannot delete default roles"}, status=status.HTTP_403_FORBIDDEN)
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
         return super().destroy(request, *args, **kwargs)
 
 
@@ -157,10 +214,75 @@ class AlignmentViewSet(viewsets.ModelViewSet):
     queryset = Alignment.objects.all()
     serializer_class = AlignmentSerializer
 
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = Alignment.objects.select_related("game_template")
+        if self.action != "list":
+            return queryset
+        template_id = self.request.query_params.get("game_template")
+        if template_id:
+            return queryset.filter(Q(is_default=True) | Q(game_template_id=template_id)).distinct()
+        return queryset.filter(is_default=True)
+
+    def _ensure_owned_template_scope(self, data):
+        template_id = data.get("game_template")
+        if not template_id:
+            return Response(
+                {"error": "Custom alignments must belong to a game template"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            template = GameTemplate.objects.get(id=template_id)
+        except GameTemplate.DoesNotExist:
+            return Response({"error": "Game template not found"}, status=status.HTTP_404_NOT_FOUND)
+        if template.creator_id != self.request.user.id:
+            return Response({"error": "Not the owner"}, status=status.HTTP_403_FORBIDDEN)
+        return None
+
+    def _ensure_instance_owner(self, instance):
+        if instance.is_default:
+            return None
+        if instance.game_template_id and instance.game_template.creator_id == self.request.user.id:
+            return None
+        return Response({"error": "Not the owner"}, status=status.HTTP_403_FORBIDDEN)
+
+    def create(self, request, *args, **kwargs):
+        scope_error = self._ensure_owned_template_scope(request.data)
+        if scope_error:
+            return scope_error
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        scope_error = self._ensure_owned_template_scope(request.data)
+        if scope_error:
+            return scope_error
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        scope_error = self._ensure_owned_template_scope(request.data)
+        if scope_error:
+            return scope_error
+        return super().partial_update(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.is_default:
             return Response({"error": "Cannot delete default alignments"}, status=status.HTTP_403_FORBIDDEN)
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
         return super().destroy(request, *args, **kwargs)
 
 

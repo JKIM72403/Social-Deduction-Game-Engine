@@ -135,10 +135,12 @@ const GameEditor = () => {
     const [selection, setSelection] = useState<Selection>({ type: 'GAME_SETTINGS' });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [lastSavedGameData, setLastSavedGameData] = useState<GameData>(gameData);
     const validationState = getGameValidationState(gameData);
     const validationErrors = validationState.errors;
     const hasValidationErrors = validationErrors.length > 0;
     const totalRoleSlots = validationState.totalRoleSlots;
+    const hasUnsavedChanges = JSON.stringify(gameData) !== JSON.stringify(lastSavedGameData);
 
     useEffect(() => {
         if (id) {
@@ -152,7 +154,7 @@ const GameEditor = () => {
                         count: s.count,
                         isDefault: s.role_details ? s.role_details.is_default : false
                     }));
-                    setGameData({
+                    const nextGameData = {
                         id: data.id,
                         name: data.name,
                         min_players: data.min_players,
@@ -161,7 +163,9 @@ const GameEditor = () => {
                         role_slots: role_slots,
                         phases: data.phases || [],
                         win_conditions: data.win_conditions || [],
-                    });
+                    };
+                    setGameData(nextGameData);
+                    setLastSavedGameData(nextGameData);
                 })
                 .catch(err => {
                     console.error("Failed to fetch game", err);
@@ -278,6 +282,13 @@ const GameEditor = () => {
         setSnackbar(prev => ({ ...prev, open: false }));
     };
 
+    const handleExitEditor = () => {
+        if (hasUnsavedChanges && !window.confirm("You have unsaved changes. Exit without saving?")) {
+            return;
+        }
+        navigate("/");
+    };
+
     const handleSaveGame = async () => {
         if (hasValidationErrors) {
             setSnackbar({ open: true, message: "Fix validation errors before saving.", severity: 'error' });
@@ -320,7 +331,7 @@ const GameEditor = () => {
 
             // Sync state with backend response (includes generated IDs and defaults)
             const data = res.data as GameTemplateAPIResponse;
-            setGameData({
+            const nextGameData = {
                 id: data.id,
                 name: data.name,
                 min_players: data.min_players,
@@ -333,7 +344,9 @@ const GameEditor = () => {
                 })),
                 phases: data.phases || [],
                 win_conditions: data.win_conditions || []
-            });
+            };
+            setGameData(nextGameData);
+            setLastSavedGameData(nextGameData);
 
         } catch (e: unknown) {
             console.error(e);
@@ -464,6 +477,9 @@ const GameEditor = () => {
                     )}
 
                     <Box sx={{ display: 'flex', gap: 2 }}>
+                        <Button variant="outlined" color="secondary" onClick={handleExitEditor} size="large">
+                            Exit
+                        </Button>
                         {id && (
                             <Button variant="outlined" color="error" onClick={() => setDeleteDialogOpen(true)} size="large">
                                 Delete Game

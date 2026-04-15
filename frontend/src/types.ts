@@ -2,6 +2,7 @@ export type Alignment = {
     id: number;
     name: string;
     is_default: boolean;
+    game_template?: number | null;
 };
 
 export type RoleSlot = {
@@ -61,6 +62,7 @@ export type RoleTemplate = {
     description: string;
     ability_details: AbilityTemplate[];
     is_default?: boolean;
+    game_template?: number | null;
 };
 
 export type SessionSummary = {
@@ -102,6 +104,7 @@ export type SessionState = {
     mode?: string;
     phase?: string;
     turn_number?: number;
+    winner?: string | null;
     phase_index?: number;
     phase_order?: Array<{ name: string; type: string }>;
     events?: string[];
