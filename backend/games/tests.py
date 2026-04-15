@@ -10,16 +10,40 @@ import threading
 from config.asgi import application
 
 from .models import (
+    Alignment,
     GameAction,
     GameParticipant,
     GameRoleSlot,
     GameSession,
     GameTemplate,
     RoleTemplate,
+    WinConditionTemplate,
 )
 
 
 User = get_user_model()
+
+
+def get_test_alignment(name):
+    alignment, _ = Alignment.objects.get_or_create(name=name.title())
+    return alignment
+
+
+def add_test_win_conditions(template):
+    WinConditionTemplate.objects.create(
+        game_template=template,
+        name="Town Wins",
+        winner_alignment=get_test_alignment("Town"),
+        criteria=[{"type": "ALIGNMENT_COUNT", "target": "MAFIA", "count": 0}],
+        order=0,
+    )
+    WinConditionTemplate.objects.create(
+        game_template=template,
+        name="Mafia Wins",
+        winner_alignment=get_test_alignment("Mafia"),
+        criteria=[{"type": "ALIGNMENT_COUNT", "target": "TOWN", "count": 0}],
+        order=1,
+    )
 
 
 class GameSessionModelTests(TestCase):
@@ -161,9 +185,9 @@ class NetworkSessionApiTests(TestCase):
 
         self.assertEqual(start_response.status_code, 200)
         self.assertEqual(start_response.data["session"]["status"], GameSession.STATUS_IN_PROGRESS)
-        self.assertEqual(start_response.data["session"]["current_phase"], "VOTING")
-        self.assertEqual(start_response.data["state"]["phase"], "VOTING")
-        self.assertEqual(start_response.data["state"]["vote_state"]["votes_needed"], 2)
+        self.assertEqual(start_response.data["session"]["current_phase"], "NIGHT")
+        self.assertEqual(start_response.data["state"]["phase"], "NIGHT")
+        self.assertEqual(start_response.data["state"]["action_state"]["actions_needed"], 2)
 
         host_snapshot = self.host_client.get(f"/api/sessions/{session_id}/snapshot/")
         guest_snapshot = self.guest_client.get(f"/api/sessions/{session_id}/snapshot/")
@@ -211,6 +235,7 @@ class NetworkSessionApiTests(TestCase):
             format="json",
         )
         self.host_client.post(f"/api/sessions/{session_id}/start/", {}, format="json")
+        self._advance_to_voting(session_id)
 
         session = GameSession.objects.get(id=session_id)
         participants = list(session.participants.select_related("user").order_by("seat_order", "joined_at"))
@@ -251,7 +276,7 @@ class NetworkSessionApiTests(TestCase):
         self.assertEqual(session.status, GameSession.STATUS_COMPLETED)
         self.assertFalse(mafia_participant.is_alive)
         self.assertEqual(
-            GameAction.objects.filter(session=session, status=GameAction.STATUS_APPLIED).count(),
+            GameAction.objects.filter(session=session, action_type="VOTE", status=GameAction.STATUS_APPLIED).count(),
             2,
         )
 
@@ -264,17 +289,37 @@ class NetworkSessionApiTests(TestCase):
         )
         town_role = RoleTemplate.objects.create(
             name="Villager",
-            alignment="TOWN",
+            alignment=get_test_alignment("Town"),
             description="Basic town role",
         )
         mafia_role = RoleTemplate.objects.create(
             name="Mafioso",
-            alignment="MAFIA",
+            alignment=get_test_alignment("Mafia"),
             description="Basic mafia role",
         )
         GameRoleSlot.objects.create(game_template=template, role=town_role, count=1)
         GameRoleSlot.objects.create(game_template=template, role=mafia_role, count=1)
+        add_test_win_conditions(template)
         return template
+
+    def _advance_to_voting(self, session_id):
+        for client in (self.host_client, self.guest_client):
+            response = client.post(
+                f"/api/sessions/{session_id}/actions/",
+                {"action_type": "SKIP"},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+
+        for client in (self.host_client, self.guest_client):
+            response = client.post(
+                f"/api/sessions/{session_id}/actions/",
+                {"action_type": "SKIP"},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+
+        self.assertEqual(response.data["session"]["current_phase"], GameSession.PHASE_VOTING)
 
 
 class GameSessionWebSocketTests(TransactionTestCase):
@@ -299,16 +344,17 @@ class GameSessionWebSocketTests(TransactionTestCase):
         )
         town_role = RoleTemplate.objects.create(
             name="Socket Villager",
-            alignment="TOWN",
+            alignment=get_test_alignment("Town"),
             description="Basic town role",
         )
         mafia_role = RoleTemplate.objects.create(
             name="Socket Mafioso",
-            alignment="MAFIA",
+            alignment=get_test_alignment("Mafia"),
             description="Basic mafia role",
         )
         GameRoleSlot.objects.create(game_template=self.template, role=town_role, count=1)
         GameRoleSlot.objects.create(game_template=self.template, role=mafia_role, count=1)
+        add_test_win_conditions(self.template)
         self.session = GameSession.objects.create(
             template=self.template,
             host=self.host,
@@ -455,6 +501,18 @@ class GameSessionWebSocketTests(TransactionTestCase):
                 {},
                 format="json",
             )
+            for client in (host_client, self.guest_client):
+                await sync_to_async(client.post, thread_sensitive=True)(
+                    f"/api/sessions/{session_id}/actions/",
+                    {"action_type": "SKIP"},
+                    format="json",
+                )
+            for client in (host_client, self.guest_client):
+                await sync_to_async(client.post, thread_sensitive=True)(
+                    f"/api/sessions/{session_id}/actions/",
+                    {"action_type": "SKIP"},
+                    format="json",
+                )
 
             communicator = WebsocketCommunicator(
                 application,
@@ -488,7 +546,7 @@ class GameSessionWebSocketTests(TransactionTestCase):
             self.assertEqual(response.status_code, 200)
 
             broadcast_payload = await communicator.receive_json_from()
-            self.assertEqual(broadcast_payload["reason"], "vote.submitted")
+            self.assertEqual(broadcast_payload["reason"], "action.submitted")
             self.assertEqual(
                 broadcast_payload["snapshot"]["state"]["vote_state"]["submitted_count"],
                 1,
@@ -520,16 +578,17 @@ class VoteConcurrencyTests(TransactionTestCase):
         )
         town_role = RoleTemplate.objects.create(
             name="Conc Villager",
-            alignment="TOWN",
+            alignment=get_test_alignment("Town"),
             description="Basic town role",
         )
         mafia_role = RoleTemplate.objects.create(
             name="Conc Mafioso",
-            alignment="MAFIA",
+            alignment=get_test_alignment("Mafia"),
             description="Basic mafia role",
         )
         GameRoleSlot.objects.create(game_template=template, role=town_role, count=1)
         GameRoleSlot.objects.create(game_template=template, role=mafia_role, count=1)
+        add_test_win_conditions(template)
 
         host_client = APIClient()
         host_client.force_authenticate(user=self.host)
@@ -552,6 +611,18 @@ class VoteConcurrencyTests(TransactionTestCase):
         host_client.post(f"/api/sessions/{self.session_id}/ready/", {"is_ready": True}, format="json")
         guest_client.post(f"/api/sessions/{self.session_id}/ready/", {"is_ready": True}, format="json")
         host_client.post(f"/api/sessions/{self.session_id}/start/", {}, format="json")
+        for client in (host_client, guest_client):
+            client.post(
+                f"/api/sessions/{self.session_id}/actions/",
+                {"action_type": "SKIP"},
+                format="json",
+            )
+        for client in (host_client, guest_client):
+            client.post(
+                f"/api/sessions/{self.session_id}/actions/",
+                {"action_type": "SKIP"},
+                format="json",
+            )
 
         session = GameSession.objects.get(id=self.session_id)
         participants = list(session.participants.select_related("user").order_by("seat_order", "joined_at"))

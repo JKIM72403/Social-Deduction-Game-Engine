@@ -22,9 +22,12 @@ import Typography from "@mui/material/Typography";
 import { useAuth } from "../contexts/AuthContext";
 import { getWebSocketSessionUrl } from "../services/api";
 import {
+  advanceSessionPhase,
   getSessionSnapshot,
+  skipSessionAction,
   setSessionReady,
   startSession,
+  submitSessionAbility,
   submitSessionVote,
 } from "../services/sessions";
 import type { SessionParticipant, SessionSnapshot, SessionSocketMessage } from "../types";
@@ -81,6 +84,9 @@ export default function SessionLobby() {
   const [startSubmitting, setStartSubmitting] = useState(false);
   const [voteSubmitting, setVoteSubmitting] = useState(false);
   const [selectedVoteTargetId, setSelectedVoteTargetId] = useState<number>(0);
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+  const [selectedAbilityIndex, setSelectedAbilityIndex] = useState<number>(-1);
+  const [selectedAbilityTargetId, setSelectedAbilityTargetId] = useState<number>(0);
 
   useEffect(() => {
     if (!Number.isFinite(numericSessionId)) {
@@ -184,6 +190,34 @@ export default function SessionLobby() {
     }
   }, [availableVoteTargets, selectedVoteTargetId]);
 
+  const availableAbilityTargets = useMemo(() => {
+    if (!snapshot || !me) {
+      return [];
+    }
+    const allowedIds = new Set(me.available_ability_target_ids);
+    return snapshot.participants.filter((participant) => allowedIds.has(participant.id));
+  }, [snapshot, me]);
+
+  useEffect(() => {
+    if (!me || me.phase_abilities.length === 0) {
+      setSelectedAbilityIndex(-1);
+      return;
+    }
+    if (!me.phase_abilities.some((ability) => ability.index === selectedAbilityIndex)) {
+      setSelectedAbilityIndex(me.phase_abilities[0].index);
+    }
+  }, [me, selectedAbilityIndex]);
+
+  useEffect(() => {
+    if (availableAbilityTargets.length === 0) {
+      setSelectedAbilityTargetId(0);
+      return;
+    }
+    if (!availableAbilityTargets.some((participant) => participant.id === selectedAbilityTargetId)) {
+      setSelectedAbilityTargetId(availableAbilityTargets[0].id);
+    }
+  }, [availableAbilityTargets, selectedAbilityTargetId]);
+
   const handleToggleReady = async () => {
     if (!snapshot || !me) {
       return;
@@ -247,6 +281,70 @@ export default function SessionLobby() {
       setActionError(message);
     } finally {
       setVoteSubmitting(false);
+    }
+  };
+
+  const handleSubmitAbility = async () => {
+    if (!snapshot || !me || selectedAbilityIndex < 0 || !selectedAbilityTargetId) {
+      return;
+    }
+
+    setActionSubmitting(true);
+    setActionError(null);
+    try {
+      const updated = await submitSessionAbility(
+        snapshot.session.id,
+        selectedAbilityIndex,
+        selectedAbilityTargetId,
+      );
+      setSnapshot(updated);
+      setActionNotice("Your action has been locked in.");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error || "Unable to submit your action right now.";
+      setActionError(message);
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
+  const handleSkipAction = async () => {
+    if (!snapshot) {
+      return;
+    }
+
+    setActionSubmitting(true);
+    setActionError(null);
+    try {
+      const updated = await skipSessionAction(snapshot.session.id);
+      setSnapshot(updated);
+      setActionNotice("You are ready for the next phase.");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error || "Unable to skip your action right now.";
+      setActionError(message);
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
+  const handleHostAdvance = async () => {
+    if (!snapshot) {
+      return;
+    }
+
+    setActionSubmitting(true);
+    setActionError(null);
+    try {
+      const updated = await advanceSessionPhase(snapshot.session.id);
+      setSnapshot(updated);
+      setActionNotice("The phase has advanced.");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error || "Unable to advance the phase right now.";
+      setActionError(message);
+    } finally {
+      setActionSubmitting(false);
     }
   };
 
@@ -428,7 +526,7 @@ export default function SessionLobby() {
 
               {snapshot.session.status !== "LOBBY" && (
                 <Alert severity="info" sx={{ mt: 2 }}>
-                  This multiplayer MVP is running server-authoritative live voting rounds. Every client view is refreshed from the same session snapshot.
+                  This live session is server-authoritative. Every client view is refreshed from the same session snapshot.
                 </Alert>
               )}
             </CardContent>
@@ -505,7 +603,7 @@ export default function SessionLobby() {
             <Card>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
-                  Vote Panel
+                  Action Panel
                 </Typography>
                 {!me?.is_alive ? (
                   <Typography variant="body2" color="text.secondary">
@@ -515,12 +613,62 @@ export default function SessionLobby() {
                   <Typography variant="body2" color="text.secondary">
                     The session is over. Review the latest result and event log below.
                   </Typography>
-                ) : hasSubmittedVote ? (
+                ) : snapshot.session.current_phase === "VOTING" && hasSubmittedVote ? (
                   <Alert severity="success">
                     Your vote is locked in. Waiting for the rest of the living players to finish this round.
                   </Alert>
-                ) : (
+                ) : snapshot.session.current_phase === "VOTING" ? (
                   <Stack spacing={2}>
+                    {me.phase_abilities.length > 0 && !me.has_submitted_ability && (
+                      <>
+                        <Typography variant="body2" color="text.secondary">
+                          Optional voting abilities resolve before the tally. Use one now, or go straight to your final vote.
+                        </Typography>
+                        <FormControl fullWidth>
+                          <InputLabel id="ability-label">Ability</InputLabel>
+                          <Select
+                            labelId="ability-label"
+                            value={selectedAbilityIndex < 0 ? "" : selectedAbilityIndex}
+                            label="Ability"
+                            onChange={(event) => setSelectedAbilityIndex(Number(event.target.value))}
+                            disabled={actionSubmitting}
+                          >
+                            {me.phase_abilities.map((ability) => (
+                              <MenuItem key={ability.index} value={ability.index}>
+                                {ability.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <FormControl fullWidth>
+                          <InputLabel id="ability-target-label">Ability Target</InputLabel>
+                          <Select
+                            labelId="ability-target-label"
+                            value={selectedAbilityTargetId || ""}
+                            label="Ability Target"
+                            onChange={(event) => setSelectedAbilityTargetId(Number(event.target.value))}
+                            disabled={actionSubmitting || availableAbilityTargets.length === 0}
+                          >
+                            {availableAbilityTargets.map((participant) => (
+                              <MenuItem key={participant.id} value={participant.id}>
+                                {participant.display_name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <Button
+                          variant="outlined"
+                          onClick={handleSubmitAbility}
+                          disabled={
+                            actionSubmitting ||
+                            selectedAbilityIndex < 0 ||
+                            !selectedAbilityTargetId
+                          }
+                        >
+                          {actionSubmitting ? "Submitting..." : "Use Ability"}
+                        </Button>
+                      </>
+                    )}
                     <Typography variant="body2" color="text.secondary">
                       Pick one living player. The server resolves the round as soon as every living participant has submitted a vote.
                     </Typography>
@@ -552,6 +700,82 @@ export default function SessionLobby() {
                     >
                       {voteSubmitting ? "Submitting..." : "Lock In Vote"}
                     </Button>
+                  </Stack>
+                ) : me.has_submitted_action ? (
+                  <Alert severity="success">
+                    Your action is locked in. Waiting for the rest of the living players to finish this phase.
+                  </Alert>
+                ) : (
+                  <Stack spacing={2}>
+                    <Typography variant="body2" color="text.secondary">
+                      {me.phase_abilities.length > 0
+                        ? "Choose an ability target, or skip if you have no action to take."
+                        : "You have no action for this phase. Mark yourself ready to continue."}
+                    </Typography>
+                    {me.phase_abilities.length > 0 && (
+                      <>
+                        <FormControl fullWidth>
+                          <InputLabel id="phase-ability-label">Ability</InputLabel>
+                          <Select
+                            labelId="phase-ability-label"
+                            value={selectedAbilityIndex < 0 ? "" : selectedAbilityIndex}
+                            label="Ability"
+                            onChange={(event) => setSelectedAbilityIndex(Number(event.target.value))}
+                            disabled={actionSubmitting}
+                          >
+                            {me.phase_abilities.map((ability) => (
+                              <MenuItem key={ability.index} value={ability.index}>
+                                {ability.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <FormControl fullWidth>
+                          <InputLabel id="phase-ability-target-label">Target</InputLabel>
+                          <Select
+                            labelId="phase-ability-target-label"
+                            value={selectedAbilityTargetId || ""}
+                            label="Target"
+                            onChange={(event) => setSelectedAbilityTargetId(Number(event.target.value))}
+                            disabled={actionSubmitting || availableAbilityTargets.length === 0}
+                          >
+                            {availableAbilityTargets.map((participant) => (
+                              <MenuItem key={participant.id} value={participant.id}>
+                                {participant.display_name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <Button
+                          variant="contained"
+                          onClick={handleSubmitAbility}
+                          disabled={
+                            actionSubmitting ||
+                            selectedAbilityIndex < 0 ||
+                            !selectedAbilityTargetId
+                          }
+                        >
+                          {actionSubmitting ? "Submitting..." : "Lock In Action"}
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      variant={me.phase_abilities.length > 0 ? "outlined" : "contained"}
+                      onClick={handleSkipAction}
+                      disabled={actionSubmitting}
+                    >
+                      {actionSubmitting ? "Submitting..." : "Skip Action"}
+                    </Button>
+                    {isHost && snapshot.session.current_phase === "DAY" && (
+                      <Button
+                        variant="text"
+                        color="secondary"
+                        onClick={handleHostAdvance}
+                        disabled={actionSubmitting}
+                      >
+                        Advance Day
+                      </Button>
+                    )}
                   </Stack>
                 )}
               </CardContent>

@@ -134,16 +134,22 @@ class GameTemplateSerializer(serializers.ModelSerializer):
 
         # If no win conditions provided, create default Town and Mafia win conditions
         if not win_conditions_data:
+            town_alignment, _ = Alignment.objects.get_or_create(
+                name="Town", defaults={"is_default": True}
+            )
+            mafia_alignment, _ = Alignment.objects.get_or_create(
+                name="Mafia", defaults={"is_default": True}
+            )
             default_win_conditions = [
                 {
                     "name": "Town Victory",
-                    "winner_alignment": "TOWN",
+                    "winner_alignment": town_alignment,
                     "criteria": [{"type": "ALIGNMENT_COUNT", "target": "MAFIA", "count": 0}],
                     "order": 0,
                 },
                 {
                     "name": "Mafia Victory",
-                    "winner_alignment": "MAFIA",
+                    "winner_alignment": mafia_alignment,
                     "criteria": [{"type": "ALIGNMENT_COUNT", "target": "TOWN", "count": 0}],
                     "order": 1,
                 },
@@ -276,5 +282,8 @@ class SessionReadySerializer(serializers.Serializer):
 
 
 class SubmitSessionActionSerializer(serializers.Serializer):
-    action_type = serializers.ChoiceField(choices=["VOTE"])
-    target_participant_id = serializers.IntegerField()
+    action_type = serializers.ChoiceField(
+        choices=["USE_ABILITY", "VOTE", "SKIP", "ADVANCE_PHASE"]
+    )
+    ability_index = serializers.IntegerField(required=False, min_value=0)
+    target_participant_id = serializers.IntegerField(required=False)

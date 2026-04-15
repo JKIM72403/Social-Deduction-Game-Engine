@@ -41,3 +41,30 @@ export async function submitSessionVote(sessionId: number, targetParticipantId: 
   });
   return response.data;
 }
+
+export async function submitSessionAbility(
+  sessionId: number,
+  abilityIndex: number,
+  targetParticipantId: number,
+) {
+  const response = await API.post<SessionSnapshot>(`/sessions/${sessionId}/actions/`, {
+    action_type: "USE_ABILITY",
+    ability_index: abilityIndex,
+    target_participant_id: targetParticipantId,
+  });
+  return response.data;
+}
+
+export async function skipSessionAction(sessionId: number) {
+  const response = await API.post<SessionSnapshot>(`/sessions/${sessionId}/actions/`, {
+    action_type: "SKIP",
+  });
+  return response.data;
+}
+
+export async function advanceSessionPhase(sessionId: number) {
+  const response = await API.post<SessionSnapshot>(`/sessions/${sessionId}/actions/`, {
+    action_type: "ADVANCE_PHASE",
+  });
+  return response.data;
+}

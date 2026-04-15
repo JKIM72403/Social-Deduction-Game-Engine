@@ -185,6 +185,28 @@ class Repository(ABC):
         """Fetch all VOTE actions for a given session + turn. For vote resolution."""
         pass
 
+    @abstractmethod
+    def check_existing_action(
+        self,
+        session_id: int,
+        participant_id: int,
+        turn_number: int,
+        phase: str,
+        action_type: str,
+    ) -> ActionDocument | None:
+        """Check if a participant already submitted this action type for a phase."""
+        pass
+
+    @abstractmethod
+    def list_submitted_actions_for_phase(
+        self,
+        session_id: int,
+        turn_number: int,
+        phase: str,
+    ) -> list[ActionDocument]:
+        """Fetch all submitted actions for a session turn and phase."""
+        pass
+
     # --- Constraint checks ---
 
     @abstractmethod
@@ -456,6 +478,44 @@ class RelationalRepository(Repository):
                 action_type="VOTE",
                 status=GameAction.STATUS_SUBMITTED,
             )
+        )
+        return [action_from_orm(a) for a in actions]
+
+    def check_existing_action(
+        self,
+        session_id: int,
+        participant_id: int,
+        turn_number: int,
+        phase: str,
+        action_type: str,
+    ) -> ActionDocument | None:
+        from games.models import GameAction
+
+        action = GameAction.objects.filter(
+            session_id=session_id,
+            participant_id=participant_id,
+            turn_number=turn_number,
+            phase=phase,
+            action_type=action_type,
+            status=GameAction.STATUS_SUBMITTED,
+        ).first()
+        return action_from_orm(action) if action else None
+
+    def list_submitted_actions_for_phase(
+        self,
+        session_id: int,
+        turn_number: int,
+        phase: str,
+    ) -> list[ActionDocument]:
+        from games.models import GameAction
+
+        actions = list(
+            GameAction.objects.filter(
+                session_id=session_id,
+                turn_number=turn_number,
+                phase=phase,
+                status=GameAction.STATUS_SUBMITTED,
+            ).order_by("submitted_at", "id")
         )
         return [action_from_orm(a) for a in actions]
 
@@ -817,6 +877,50 @@ class MongoRepository(Repository):
         )
         return [ActionDocument(**doc) for doc in cursor]
 
+    def check_existing_action(
+        self,
+        session_id: int,
+        participant_id: int,
+        turn_number: int,
+        phase: str,
+        action_type: str,
+    ) -> ActionDocument | None:
+        from games.models import GameAction
+
+        doc = self.db["actions"].find_one(
+            {
+                "session_id": session_id,
+                "participant_id": participant_id,
+                "turn_number": turn_number,
+                "phase": phase,
+                "action_type": action_type,
+                "status": GameAction.STATUS_SUBMITTED,
+            }
+        )
+        return ActionDocument(**doc) if doc else None
+
+    def list_submitted_actions_for_phase(
+        self,
+        session_id: int,
+        turn_number: int,
+        phase: str,
+    ) -> list[ActionDocument]:
+        from games.models import GameAction
+
+        cursor = (
+            self.db["actions"]
+            .find(
+                {
+                    "session_id": session_id,
+                    "turn_number": turn_number,
+                    "phase": phase,
+                    "status": GameAction.STATUS_SUBMITTED,
+                }
+            )
+            .sort([("submitted_at", 1), ("_id", 1)])
+        )
+        return [ActionDocument(**doc) for doc in cursor]
+
     def check_unique_display_name(
         self, session_id: int, display_name: str, exclude_user_id: int | None = None
     ) -> bool:
@@ -1025,6 +1129,28 @@ class DualWriteRepository(Repository):
         self, session_id: int, turn_number: int
     ) -> list[ActionDocument]:
         return self._primary.list_actions_for_vote_resolution(session_id, turn_number)
+
+    def check_existing_action(
+        self,
+        session_id: int,
+        participant_id: int,
+        turn_number: int,
+        phase: str,
+        action_type: str,
+    ) -> ActionDocument | None:
+        return self._primary.check_existing_action(
+            session_id, participant_id, turn_number, phase, action_type
+        )
+
+    def list_submitted_actions_for_phase(
+        self,
+        session_id: int,
+        turn_number: int,
+        phase: str,
+    ) -> list[ActionDocument]:
+        return self._primary.list_submitted_actions_for_phase(
+            session_id, turn_number, phase
+        )
 
     # --- Constraint checks — always from primary ---
 

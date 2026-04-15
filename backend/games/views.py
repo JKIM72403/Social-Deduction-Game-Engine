@@ -42,7 +42,7 @@ from .serializers import (
     UserSerializer,
     WinConditionTemplateSerializer,
 )
-from .session_runtime import build_started_session_state, record_vote_progress, resolve_voting_round
+from .session_runtime import apply_and_advance_phase, build_started_session_state
 from .session_state import (
     broadcast_session_event,
     load_session_snapshot,
@@ -449,6 +449,7 @@ def start_network_session(request, session_id):
 def submit_network_session_action(request, session_id):
     serializer = SubmitSessionActionSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
+    action_type = serializer.validated_data["action_type"]
 
     repo = get_repository()
     session_doc = repo.get_session_by_id(session_id)
@@ -465,67 +466,112 @@ def submit_network_session_action(request, session_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if session_doc["current_phase"] != GameSession.PHASE_VOTING:
+    if action_type != "ADVANCE_PHASE" and not participant_doc["is_alive"]:
         return Response(
-            {"error": "Votes can only be submitted during the voting phase"},
+            {"error": "Eliminated participants cannot act"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not participant_doc["is_alive"]:
-        return Response(
-            {"error": "Eliminated participants cannot vote"},
-            status=status.HTTP_400_BAD_REQUEST,
+    phase = session_doc["current_phase"]
+    payload = {}
+    if action_type == "ADVANCE_PHASE":
+        if session_doc["host_user_id"] != request.user.id:
+            return Response({"error": "Only the host can advance the phase"}, status=status.HTTP_403_FORBIDDEN)
+    elif action_type == "VOTE":
+        if phase != GameSession.PHASE_VOTING:
+            return Response(
+                {"error": "Votes can only be submitted during the voting phase"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        target_participant_doc = _get_living_action_target(
+            repo,
+            session_id,
+            serializer.validated_data.get("target_participant_id"),
+            "Vote target not found",
         )
-
-    target_participant_doc = repo.get_participant_by_id(serializer.validated_data["target_participant_id"])
-    if target_participant_doc is None or target_participant_doc["session_id"] != session_id:
-        return Response({"error": "Vote target not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    if not target_participant_doc["is_alive"]:
-        return Response(
-            {"error": "You can only vote for living participants"},
-            status=status.HTTP_400_BAD_REQUEST,
+        if isinstance(target_participant_doc, Response):
+            return target_participant_doc
+        payload = {
+            "target_participant_id": target_participant_doc["_id"],
+            "target_display_name": target_participant_doc["display_name"],
+        }
+    elif action_type == "USE_ABILITY":
+        ability_index = serializer.validated_data.get("ability_index")
+        if ability_index is None:
+            return Response({"error": "ability_index is required"}, status=status.HTTP_400_BAD_REQUEST)
+        runtime_player = _runtime_player_for_participant(
+            session_doc.get("state_json") or {},
+            participant_doc["_id"],
         )
+        if runtime_player is None:
+            return Response({"error": "Your runtime player state was not found"}, status=status.HTTP_400_BAD_REQUEST)
+        abilities = runtime_player.get("abilities") or []
+        if ability_index >= len(abilities):
+            return Response({"error": "Ability not found"}, status=status.HTTP_404_NOT_FOUND)
+        ability = abilities[ability_index]
+        if ability.get("phase") != phase:
+            return Response(
+                {"error": f"{ability.get('name', 'That ability')} cannot be used during {phase}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        target_id = serializer.validated_data.get("target_participant_id")
+        if target_id is None and ability.get("target_self"):
+            target_id = participant_doc["_id"]
+        target_participant_doc = _get_living_action_target(
+            repo,
+            session_id,
+            target_id,
+            "Ability target not found",
+        )
+        if isinstance(target_participant_doc, Response):
+            return target_participant_doc
+        payload = {
+            "ability_index": ability_index,
+            "ability_name": ability.get("name"),
+            "ability_type": ability.get("ability_type"),
+            "target_participant_id": target_participant_doc["_id"],
+            "target_display_name": target_participant_doc["display_name"],
+        }
+    elif action_type == "SKIP":
+        if phase == GameSession.PHASE_VOTING:
+            return Response(
+                {"error": "Voting requires a vote. Skip is only available for action phases."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     with transaction.atomic():
-        # Re-fetch the participant and target inside the transaction with a lock
-        # for ORM-based race condition prevention
         participant_doc = repo.get_participant_with_lock(session_id, request.user.id)
-        if participant_doc is None or not participant_doc["is_alive"]:
+        if participant_doc is None:
             return Response(
-                {"error": "Participant no longer eligible to vote"},
+                {"error": "Participant no longer eligible to act"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        target_participant_doc = repo.get_participant_by_id(serializer.validated_data["target_participant_id"])
-        if target_participant_doc is None or not target_participant_doc["is_alive"]:
+        if action_type != "ADVANCE_PHASE" and not participant_doc["is_alive"]:
             return Response(
-                {"error": "Vote target is no longer a valid living participant"},
+                {"error": "Participant no longer eligible to act"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        existing_vote = repo.check_existing_vote(
+        duplicate_error = _duplicate_action_error(
+            repo,
             session_id,
             participant_doc["_id"],
             session_doc["turn_number"],
+            phase,
+            action_type,
         )
-        if existing_vote is not None:
-            return Response(
-                {"error": "You have already locked in your vote for this round"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if duplicate_error:
+            return Response({"error": duplicate_error}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             repo.create_action(
                 session_id,
                 participant_doc["_id"],
                 turn_number=session_doc["turn_number"],
-                phase=GameSession.PHASE_VOTING,
-                action_type="VOTE",
-                payload={
-                    "target_participant_id": target_participant_doc["_id"],
-                    "target_display_name": target_participant_doc["display_name"],
-                },
+                phase=phase,
+                action_type=action_type,
+                payload=payload,
             )
         except ValueError as exc:
             return Response(
@@ -533,66 +579,88 @@ def submit_network_session_action(request, session_id):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        state = dict(session_doc.get("state_json") or {})
-        vote_state = dict(state.get("vote_state") or {})
-        submitted_participant_ids = list(vote_state.get("submitted_participant_ids") or [])
-        if participant_doc["_id"] not in submitted_participant_ids:
-            submitted_participant_ids.append(participant_doc["_id"])
-        state = record_vote_progress(state, submitted_participant_ids)
-
-        # Count alive participants
         all_participants = repo.get_participants_for_session(session_id)
-        alive_participant_count = sum(1 for p in all_participants if p["is_alive"])
-        all_votes_submitted = len(submitted_participant_ids) >= alive_participant_count
+        resolution = apply_and_advance_phase(repo, session_doc, all_participants)
 
-        broadcast_reason = "vote.submitted"
+        for participant_id, fields in resolution["participant_updates"]:
+            repo.update_participant(participant_id, **fields)
 
-        if all_votes_submitted:
-            # Load win conditions from template config (ORM — template data, not runtime)
-            from games.models import WinConditionTemplate
-            win_conditions = list(
-                WinConditionTemplate.objects
-                .filter(game_template_id=session_doc["template_id"])
-                .order_by("order")
+        if resolution["action_ids"]:
+            repo.bulk_update_actions(
+                resolution["action_ids"],
+                status=GameAction.STATUS_APPLIED,
+                resolved_at=timezone.now(),
             )
 
-            next_state, eliminated_participant_id, winner_alignment = resolve_voting_round(
-                repo, session_doc, all_participants, win_conditions
+        if resolution["completed"]:
+            repo.update_session(
+                session_id,
+                status=GameSession.STATUS_COMPLETED,
+                current_phase=resolution["state"]["phase"],
+                turn_number=resolution["state"]["turn_number"],
+                state_json=resolution["state"],
+                ended_at=timezone.now(),
             )
-
-            if eliminated_participant_id is not None:
-                repo.update_participant(
-                    eliminated_participant_id,
-                    is_alive=False,
-                    eliminated_at=timezone.now(),
-                )
-
-            if winner_alignment:
-                repo.update_session(
-                    session_id,
-                    status=GameSession.STATUS_COMPLETED,
-                    current_phase=next_state["phase"],
-                    turn_number=next_state["turn_number"],
-                    state_json=next_state,
-                    ended_at=timezone.now(),
-                )
-            else:
-                repo.update_session(
-                    session_id,
-                    current_phase=next_state["phase"],
-                    turn_number=next_state["turn_number"],
-                    state_json=next_state,
-                )
-            broadcast_reason = "vote.resolved"
         else:
             repo.update_session(
                 session_id,
-                state_json=state,
+                current_phase=resolution["state"]["phase"],
+                turn_number=resolution["state"]["turn_number"],
+                state_json=resolution["state"],
             )
 
-    post_write_broadcast(session_id, broadcast_reason)
+    post_write_broadcast(
+        session_id,
+        "phase.resolved" if resolution["resolved"] else "action.submitted",
+    )
 
     return Response(load_session_snapshot(session_id, viewer_user_id=request.user.id))
+
+def _get_living_action_target(repo, session_id, target_participant_id, not_found_message):
+    if target_participant_id is None:
+        return Response({"error": "A target is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    target_participant_doc = repo.get_participant_by_id(target_participant_id)
+    if target_participant_doc is None or target_participant_doc["session_id"] != session_id:
+        return Response({"error": not_found_message}, status=status.HTTP_404_NOT_FOUND)
+
+    if not target_participant_doc["is_alive"]:
+        return Response(
+            {"error": "You can only target living participants"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return target_participant_doc
+
+
+def _duplicate_action_error(repo, session_id, participant_id, turn_number, phase, action_type):
+    if action_type == "ADVANCE_PHASE":
+        return None
+
+    if action_type == "VOTE":
+        existing = repo.check_existing_action(
+            session_id, participant_id, turn_number, phase, "VOTE"
+        )
+        return "You have already locked in your vote for this round" if existing else None
+
+    if action_type in {"USE_ABILITY", "SKIP"}:
+        existing_ability = repo.check_existing_action(
+            session_id, participant_id, turn_number, phase, "USE_ABILITY"
+        )
+        existing_skip = repo.check_existing_action(
+            session_id, participant_id, turn_number, phase, "SKIP"
+        )
+        if existing_ability or existing_skip:
+            return "You have already submitted your action for this phase"
+
+    return None
+
+
+def _runtime_player_for_participant(state_json, participant_id):
+    for player in (state_json or {}).get("players", []):
+        if player.get("participant_id") == participant_id:
+            return player
+    return None
 
 
 # --- Existing Single-Player Demo Session Views ---

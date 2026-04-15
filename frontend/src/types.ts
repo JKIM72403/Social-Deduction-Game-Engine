@@ -109,7 +109,22 @@ export type SessionState = {
         participant_id: number;
         display_name: string;
         is_alive: boolean;
+        role_name?: string;
+        role_alignment?: string;
     }>;
+    logs?: Array<{
+        type: string;
+        message: string;
+        turn: number;
+        visible_to: "all" | string[];
+    }>;
+    action_state?: {
+        status?: "OPEN" | "CLOSED";
+        required_participant_ids?: number[];
+        submitted_participant_ids?: number[];
+        submitted_count?: number;
+        actions_needed?: number;
+    };
     vote_state?: {
         status?: "OPEN" | "RESOLVED";
         required_participant_ids?: number[];
@@ -132,15 +147,30 @@ export type SessionState = {
     };
 };
 
+export type SessionAbility = {
+    index: number;
+    name: string;
+    phase: "NIGHT" | "DAY" | "VOTING" | string;
+    ability_type: string;
+    target_self?: boolean;
+};
+
 export type SessionViewer = {
     participant_id: number;
     display_name: string;
     is_alive: boolean;
     role_name: string;
     role_alignment: string;
+    abilities: SessionAbility[];
+    phase_abilities: SessionAbility[];
+    has_submitted_action: boolean;
+    has_submitted_ability: boolean;
     has_submitted_vote: boolean;
+    current_ability_target_id: number | null;
     current_vote_target_id: number | null;
+    available_ability_target_ids: number[];
     available_vote_target_ids: number[];
+    action_required: boolean;
 };
 
 export type SessionSnapshot = {

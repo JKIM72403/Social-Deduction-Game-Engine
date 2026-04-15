@@ -13,33 +13,36 @@ def build_ability(ability_template: AbilityTemplate):
     
     # Simple mapping based on type
     if atype == "KILL":
-        return KillAbility(name, priority=5, phase=ability_template.phase)
+        ability = KillAbility(name, priority=5, phase=ability_template.phase)
     elif atype == "PROTECT":
-        return ProtectAbility(name, priority=1, phase=ability_template.phase)
+        ability = ProtectAbility(name, priority=1, phase=ability_template.phase)
     elif atype == "INVESTIGATE":
-        return InvestigateAbility(name, priority=10, phase=ability_template.phase)
+        ability = InvestigateAbility(name, priority=10, phase=ability_template.phase)
     elif atype == "TRAP":
-        return TrapAbility(name, priority=0, phase=ability_template.phase)
+        ability = TrapAbility(name, priority=0, phase=ability_template.phase)
     elif atype == "BLOCK":
-        return BlockAbility(name, priority=0, phase=ability_template.phase)
+        ability = BlockAbility(name, priority=0, phase=ability_template.phase)
     elif atype == "VOTE_STEAL":
-        return VoteStealAbility(name, priority=10, phase=ability_template.phase)
+        ability = VoteStealAbility(name, priority=10, phase=ability_template.phase)
     elif atype == "DOUBLE_VOTE":
-        return DoubleVoteAbility(name, priority=10, phase=ability_template.phase)
+        ability = DoubleVoteAbility(name, priority=10, phase=ability_template.phase)
     elif atype == "ROLEBLOCK":
-        return RoleblockAbility(name, priority=0, phase=ability_template.phase)
+        ability = RoleblockAbility(name, priority=0, phase=ability_template.phase)
     elif atype == "LOOKOUT":
-        return LookoutAbility(name, priority=10, phase=ability_template.phase)
+        ability = LookoutAbility(name, priority=10, phase=ability_template.phase)
     elif atype == "JAIL":
-        return JailAbility(name, priority=0, phase=ability_template.phase)
+        ability = JailAbility(name, priority=0, phase=ability_template.phase)
     elif atype == "DOUSE":
-        return DouseAbility(name, priority=5, phase=ability_template.phase)
+        ability = DouseAbility(name, priority=5, phase=ability_template.phase)
     elif atype == "IGNITE":
-        return IgniteAbility(name, priority=5, phase=ability_template.phase)
+        ability = IgniteAbility(name, priority=5, phase=ability_template.phase)
     elif atype == "IMMUNE_KILL":
-        return ImmuneKillAbility(name, priority=5, phase=ability_template.phase)
+        ability = ImmuneKillAbility(name, priority=5, phase=ability_template.phase)
     else:
-        return Ability(name, priority=50, phase=ability_template.phase)
+        ability = Ability(name, priority=50, phase=ability_template.phase)
+
+    ability.ability_type = atype
+    return ability
 
 def build_role(role_template: RoleTemplate) -> Role:
     abilities = []
@@ -61,7 +64,7 @@ def build_game_engine(game_template: GameTemplate, player_names: list) -> GameEn
     win_conditions = [
         {
             "name": wc.name,
-            "winner_alignment": wc.winner_alignment,
+            "winner_alignment": wc.winner_alignment.name.upper(),
             "criteria": wc.criteria
         }
         for wc in game_template.win_conditions.all()
