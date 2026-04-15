@@ -8,6 +8,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import Alert from "@mui/material/Alert";
 import { useAuth } from "../contexts/AuthContext";
+import bgImage from '../assets/mafia_bg.png';
 
 export default function Signup() {
     const { user, signup } = useAuth();
@@ -50,9 +51,18 @@ export default function Signup() {
     };
 
     return (
-        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexGrow: 1, p: 4 }}>
-            <Card sx={{ width: "100%", maxWidth: 420 }}>
-                <CardContent sx={{ p: 4 }}>
+        <Box sx={{ 
+            display: "flex", justifyContent: "center", alignItems: "center", height: "100%", p: 4,
+            backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center', position: 'relative',
+            '&::before': { content: '""', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10, 15, 25, 0.55)', zIndex: 0 }
+        }}>
+            <Card sx={{ 
+                width: "100%", maxWidth: 420, position: 'relative', zIndex: 1,
+                bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: 3,
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+            }}>
+                <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
                     <Typography variant="h5" fontWeight={600} gutterBottom>
                         Sign Up
                     </Typography>

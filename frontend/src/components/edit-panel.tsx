@@ -67,7 +67,7 @@ const EditPanel = ({
 }: EditPanelProps) => {
     if (!selection) {
         return (
-            <Box sx={{ width: 350, p: 3, textAlign: 'center', color: 'text.secondary' }}>
+            <Box sx={{ width: 350, p: 3, textAlign: 'center', color: 'rgba(255,255,255,0.7)', bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
                 <Typography>Select an item to edit</Typography>
             </Box>
         );
@@ -75,7 +75,7 @@ const EditPanel = ({
 
     if (selection.type === 'NEW_PHASE') {
         return (
-            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+            <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <PhaseEditor
                     gameId={gameData.id!}
                     onSave={onSavePhase}
@@ -89,7 +89,7 @@ const EditPanel = ({
         const phase = gameData.phases[selection.index];
         if (!phase) return null;
         return (
-            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+            <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <PhaseEditor
                     gameId={gameData.id}
                     phaseId={selection.id}
@@ -104,7 +104,7 @@ const EditPanel = ({
 
     if (selection.type === 'NEW_WIN_CONDITION') {
         return (
-            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+            <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <WinConditionEditor
                     gameId={gameData.id!}
                     roleSlots={gameData.role_slots}
@@ -119,7 +119,7 @@ const EditPanel = ({
         const wc = gameData.win_conditions[selection.index];
         if (!wc) return null;
         return (
-            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+            <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <WinConditionEditor
                     gameId={gameData.id}
                     winConditionId={selection.id}
@@ -135,7 +135,7 @@ const EditPanel = ({
 
     if (selection.type === 'NEW_ROLE') {
         return (
-            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+            <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <RoleSelector
                     existingSlots={gameData.role_slots}
                     onSelectRole={onSaveRole}
@@ -148,7 +148,7 @@ const EditPanel = ({
 
     if (selection.type === 'CREATE_CUSTOM_ROLE') {
         return (
-            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+            <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <RoleEditor onSave={onSaveRole} onCancel={onCancel} />
             </Box>
         );
@@ -156,7 +156,7 @@ const EditPanel = ({
 
     if (selection.type === 'EDIT_ROLE_DETAILS') {
         return (
-            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+            <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <RoleEditor
                     roleId={selection.id}
                     onSave={(updatedRole, originalId) => {
@@ -170,7 +170,7 @@ const EditPanel = ({
 
     if (selection.type === 'ALIGNMENT_MANAGER') {
         return (
-            <Box sx={{ width: 400, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3, overflowY: 'auto' }}>
+            <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <AlignmentManager onCancel={onCancel} />
             </Box>
         );
@@ -178,7 +178,7 @@ const EditPanel = ({
 
     if (selection.type === 'GAME_SETTINGS') {
         return (
-            <Box sx={{ width: 350, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3 }}>
+            <Box sx={{ width: 350, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3 }}>
                 <Typography variant="h6" sx={{ mb: 3 }}>Game Settings</Typography>
 
                 <TextField
@@ -228,7 +228,7 @@ const EditPanel = ({
         if (!slot) return null;
 
         return (
-            <Box sx={{ width: 350, bgcolor: 'background.paper', borderLeft: '1px solid', borderColor: 'divider', p: 3 }}>
+            <Box sx={{ width: 350, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3 }}>
                 <Typography variant="h6" sx={{ mb: 3 }}>Edit Role Slot</Typography>
 
                 <Typography variant="subtitle1" sx={{ mb: 2 }}>
