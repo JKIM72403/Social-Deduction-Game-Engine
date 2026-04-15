@@ -12,11 +12,9 @@ import {
     HowToVoteRounded as VoteIcon,
     FlashOnRounded as AbilityIcon,
     EmojiEventsRounded as WinIcon,
-    InfoOutlined as SystemIcon,
-    Circle as DefaultIcon
+    InfoOutlined as SystemIcon
 } from '@mui/icons-material';
 import { formatLogMessage } from "../utils";
-import { COLORS } from '../constants/colors';
 import bgImage from '../assets/mafia_bg.png';
 
 type Player = {
