@@ -18,7 +18,7 @@ import AddIcon from '@mui/icons-material/Add';
 import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
 import { API } from "../services/api";
-import type { WinCondition, RoleSlot, Criterion } from "../types";
+import type { Alignment, WinCondition, RoleSlot, Criterion } from "../types";
 
 interface Props {
     gameId?: number;
@@ -30,54 +30,123 @@ interface Props {
     onDelete?: () => void;
 }
 
+type EditableWinCondition = Omit<WinCondition, "winner_alignment"> & {
+    winner_alignment: number | "";
+};
+
+const buildDefaultWinCondition = (): EditableWinCondition => ({
+    name: "",
+    winner_alignment: "",
+    criteria: [{ type: 'ALIGNMENT_COUNT', target: '', count: 0 }],
+    order: 0,
+});
+
 export default function WinConditionEditor({ gameId, winConditionId, initialData, roleSlots, onSave, onCancel, onDelete }: Props) {
-    const [alignments, setAlignments] = useState<any[]>([]);
-    const [wc, setWc] = useState<WinCondition>(initialData || {
-        name: "",
-        winner_alignment: 0,
-        criteria: [{ type: 'ALIGNMENT_COUNT', target: 'MAFIA', count: 0 }],
-        order: 0
-    });
+    const [alignments, setAlignments] = useState<Alignment[]>([]);
+    const [wc, setWc] = useState<EditableWinCondition>(
+        initialData ? { ...initialData } : buildDefaultWinCondition()
+    );
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     useEffect(() => {
-        const params = gameId ? { game_template: gameId } : undefined;
-        API.get("/alignments/", { params }).then(res => {
-            setAlignments(res.data);
-            if (!initialData && !winConditionId && res.data.length > 0) {
-                const town = res.data.find((a: any) => a.name.toUpperCase() === 'TOWN');
-                const townName = town ? town.name.toUpperCase() : res.data[0].name.toUpperCase();
-                setWc(prev => ({
-                    ...prev,
-                    winner_alignment: town ? town.id : res.data[0].id,
-                    criteria: [{ type: 'ALIGNMENT_COUNT', target: townName, count: 0 }]
-                }));
-            }
-        });
+        let cancelled = false;
 
-        if (initialData) {
-            setWc(initialData);
-        } else if (winConditionId) {
-            API.get(`/win-conditions/${winConditionId}/`).then(res => {
-                setWc(res.data);
-            });
-        }
+        const fetchEditorData = async () => {
+            try {
+                const params = gameId ? { game_template: gameId } : undefined;
+                const alignmentRes = await API.get("/alignments/", { params });
+                if (cancelled) {
+                    return;
+                }
+
+                const loadedAlignments: Alignment[] = alignmentRes.data;
+                setAlignments(loadedAlignments);
+
+                if (initialData) {
+                    setWc({ ...initialData });
+                    return;
+                }
+
+                if (winConditionId) {
+                    const wcRes = await API.get(`/win-conditions/${winConditionId}/`);
+                    if (!cancelled) {
+                        setWc({ ...wcRes.data });
+                    }
+                    return;
+                }
+
+                const town = loadedAlignments.find((a) => a.name.toUpperCase() === 'TOWN');
+                const fallbackAlignment = town ?? loadedAlignments[0];
+                setWc((prev) => ({
+                    ...prev,
+                    winner_alignment: fallbackAlignment?.id ?? "",
+                    criteria: prev.criteria.length > 0
+                        ? prev.criteria.map((criterion) => (
+                            criterion.type === 'ALIGNMENT_COUNT'
+                                ? { ...criterion, target: criterion.target || fallbackAlignment?.name.toUpperCase() || '' }
+                                : criterion
+                        ))
+                        : [{ type: 'ALIGNMENT_COUNT', target: fallbackAlignment?.name.toUpperCase() || '', count: 0 }],
+                }));
+            } catch (e) {
+                console.error(e);
+                alert("Failed to load win condition editor data");
+            }
+        };
+
+        fetchEditorData();
+
+        return () => {
+            cancelled = true;
+        };
     }, [gameId, winConditionId, initialData]);
 
     const submit = async () => {
+        if (!wc.name.trim()) {
+            alert("Condition name is required");
+            return;
+        }
+
+        if (typeof wc.winner_alignment !== 'number') {
+            alert("Winner alignment is required");
+            return;
+        }
+
+        if (wc.criteria.length === 0) {
+            alert("At least one rule is required");
+            return;
+        }
+
+        const hasInvalidCriteria = wc.criteria.some((criterion) => {
+            if (criterion.type === 'SURVIVAL') {
+                return criterion.count < 0;
+            }
+            return !criterion.target || criterion.count < 0;
+        });
+        if (hasInvalidCriteria) {
+            alert("Each rule must have a valid target and non-negative count");
+            return;
+        }
+
+        const payload: WinCondition = {
+            ...wc,
+            name: wc.name.trim(),
+            winner_alignment: wc.winner_alignment,
+        };
+
         if (!gameId) {
             // Local-only save
-            onSave(wc);
+            onSave(payload);
             return;
         }
 
         try {
-            const payload = { ...wc, game_template: gameId };
+            const requestPayload = { ...payload, game_template: gameId };
             let res;
             if (winConditionId) {
-                res = await API.put(`/win-conditions/${winConditionId}/`, payload);
+                res = await API.put(`/win-conditions/${winConditionId}/`, requestPayload);
             } else {
-                res = await API.post("/win-conditions/", payload);
+                res = await API.post("/win-conditions/", requestPayload);
             }
             onSave(res.data);
         } catch (e) {
@@ -105,9 +174,21 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
     };
 
     const addCriterion = () => {
+        if (roleSlots.length === 0 && alignments.length === 0) {
+            alert("Add at least one role or alignment before adding a rule");
+            return;
+        }
+
+        const defaultRoleTarget = roleSlots[0]?.roleName;
+        const defaultAlignmentTarget = alignments[0]?.name.toUpperCase();
+
         setWc({
             ...wc,
-            criteria: [...wc.criteria, { type: 'ROLE_COUNT', target: roleSlots[0]?.roleName || '', count: 0 }]
+            criteria: [...wc.criteria, {
+                type: defaultRoleTarget ? 'ROLE_COUNT' : 'ALIGNMENT_COUNT',
+                target: defaultRoleTarget || defaultAlignmentTarget || '',
+                count: 0,
+            }]
         });
     };
 
@@ -142,7 +223,7 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
                 <Select
                     value={wc.winner_alignment}
                     label="Winner Alignment"
-                    onChange={e => setWc({ ...wc, winner_alignment: e.target.value as any })}
+                    onChange={e => setWc({ ...wc, winner_alignment: Number(e.target.value) })}
                 >
                     {alignments.map(a => (
                         <MenuItem key={a.id} value={a.id}>{a.name} Wins</MenuItem>
@@ -173,7 +254,15 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
                         <Select
                             value={c.type}
                             label="Rule Type"
-                            onChange={e => updateCriterion(index, { type: e.target.value as any, target: e.target.value === 'ROLE_COUNT' ? (roleSlots[0]?.roleName || '') : (alignments[0]?.name.toUpperCase() || 'MAFIA') })}
+                            onChange={e => {
+                                const nextType = e.target.value as Criterion['type'];
+                                const nextTarget = nextType === 'ROLE_COUNT'
+                                    ? (roleSlots[0]?.roleName || '')
+                                    : nextType === 'ALIGNMENT_COUNT'
+                                        ? (alignments[0]?.name.toUpperCase() || '')
+                                        : c.target;
+                                updateCriterion(index, { type: nextType, target: nextTarget });
+                            }}
                         >
                             <MenuItem value="ROLE_COUNT">Specific Role Count</MenuItem>
                             <MenuItem value="ALIGNMENT_COUNT">Alignment Count</MenuItem>
@@ -227,7 +316,11 @@ export default function WinConditionEditor({ gameId, winConditionId, initialData
                             type="number"
                             label="Count"
                             value={c.count}
-                            onChange={e => updateCriterion(index, { count: parseInt(e.target.value) || 0 })}
+                            inputProps={{ min: 0 }}
+                            onChange={e => {
+                                const parsed = Number.parseInt(e.target.value, 10);
+                                updateCriterion(index, { count: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) });
+                            }}
                             sx={{ width: 100 }}
                         />
                     </Box>

@@ -77,7 +77,7 @@ const EditPanel = ({
         return (
             <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <PhaseEditor
-                    gameId={gameData.id!}
+                    gameId={gameData.id}
                     onSave={onSavePhase}
                     onCancel={onCancel}
                 />
@@ -106,7 +106,7 @@ const EditPanel = ({
         return (
             <Box sx={{ width: 400, bgcolor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', borderLeft: '1px solid rgba(255,255,255,0.1)', p: 3, overflowY: 'auto' }}>
                 <WinConditionEditor
-                    gameId={gameData.id!}
+                    gameId={gameData.id}
                     roleSlots={gameData.role_slots}
                     onSave={onSaveWinCondition}
                     onCancel={onCancel}

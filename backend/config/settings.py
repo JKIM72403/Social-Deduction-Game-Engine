@@ -27,6 +27,11 @@ def _as_bool(value: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _as_csv(value: str, default: str) -> list[str]:
+    source = value if value else default
+    return [item.strip() for item in source.split(',') if item.strip()]
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -36,11 +41,14 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-g7jh3n1ljs5*^e!vu9qdcj2woy
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = _as_bool(os.getenv('DEBUG', 'False'))
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = _as_csv(os.getenv('ALLOWED_HOSTS'), 'localhost,127.0.0.1')
 
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',')
+CORS_ALLOWED_ORIGINS = _as_csv(
+    os.getenv('CORS_ALLOWED_ORIGINS'),
+    'http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173',
+)
 
 # MongoDB migration settings (foundation only).
 # The application still uses Django ORM + sqlite3 for runtime persistence until

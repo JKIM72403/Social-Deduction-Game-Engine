@@ -138,6 +138,7 @@ class TemplateScopedCustomizationApiTests(TestCase):
             creator=self.other_owner,
         )
         self.town = Alignment.objects.create(name="Town", is_default=True)
+        self.mafia = Alignment.objects.create(name="Mafia", is_default=True)
         self.default_role = RoleTemplate.objects.create(
             name="Villager",
             alignment=self.town,
@@ -225,6 +226,236 @@ class TemplateScopedCustomizationApiTests(TestCase):
         self.assertEqual(other_scope_response.status_code, 403)
         self.assertEqual(owned_scope_response.status_code, 201)
         self.assertEqual(owned_scope_response.data["game_template"], self.template.id)
+
+    def test_phase_writes_require_owned_template_scope(self):
+        missing_scope_response = self.owner_client.post(
+            "/api/phases/",
+            {
+                "name": "Night",
+                "phase_type": "NIGHT",
+                "order": 0,
+            },
+            format="json",
+        )
+        other_scope_response = self.owner_client.post(
+            "/api/phases/",
+            {
+                "name": "Day",
+                "phase_type": "DAY",
+                "order": 1,
+                "game_template": self.other_template.id,
+            },
+            format="json",
+        )
+        owned_scope_response = self.owner_client.post(
+            "/api/phases/",
+            {
+                "name": "Voting",
+                "phase_type": "VOTING",
+                "order": 2,
+                "game_template": self.template.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(missing_scope_response.status_code, 400)
+        self.assertEqual(other_scope_response.status_code, 403)
+        self.assertEqual(owned_scope_response.status_code, 201)
+        self.assertEqual(owned_scope_response.data["game_template"], self.template.id)
+
+    def test_win_condition_writes_require_owned_template_scope(self):
+        payload = {
+            "name": "Town Rule",
+            "winner_alignment": self.town.id,
+            "criteria": [{"type": "ALIGNMENT_COUNT", "target": "MAFIA", "count": 0}],
+            "order": 0,
+        }
+
+        missing_scope_response = self.owner_client.post(
+            "/api/win-conditions/",
+            payload,
+            format="json",
+        )
+        other_scope_response = self.owner_client.post(
+            "/api/win-conditions/",
+            {
+                **payload,
+                "game_template": self.other_template.id,
+            },
+            format="json",
+        )
+        owned_scope_response = self.owner_client.post(
+            "/api/win-conditions/",
+            {
+                **payload,
+                "game_template": self.template.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(missing_scope_response.status_code, 400)
+        self.assertEqual(other_scope_response.status_code, 403)
+        self.assertEqual(owned_scope_response.status_code, 201)
+        self.assertEqual(owned_scope_response.data["game_template"], self.template.id)
+
+    def test_win_condition_rejects_invalid_criteria(self):
+        response = self.owner_client.post(
+            "/api/win-conditions/",
+            {
+                "name": "Bad Rule",
+                "winner_alignment": self.town.id,
+                "criteria": [{"type": "NOT_VALID", "target": "MAFIA", "count": 0}],
+                "order": 0,
+                "game_template": self.template.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_win_condition_rejects_unknown_alignment_target(self):
+        response = self.owner_client.post(
+            "/api/win-conditions/",
+            {
+                "name": "Bad Alignment Target",
+                "winner_alignment": self.town.id,
+                "criteria": [{"type": "ALIGNMENT_COUNT", "target": "GHOSTS", "count": 0}],
+                "order": 0,
+                "game_template": self.template.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_win_condition_rejects_unknown_role_target(self):
+        response = self.owner_client.post(
+            "/api/win-conditions/",
+            {
+                "name": "Bad Role Target",
+                "winner_alignment": self.town.id,
+                "criteria": [{"type": "ROLE_COUNT", "target": "Ghost Role", "count": 0}],
+                "order": 0,
+                "game_template": self.template.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_win_condition_rejects_winner_alignment_from_other_template(self):
+        response = self.owner_client.post(
+            "/api/win-conditions/",
+            {
+                "name": "Wrong Scope Rule",
+                "winner_alignment": self.other_alignment.id,
+                "criteria": [{"type": "ALIGNMENT_COUNT", "target": "ALIENS", "count": 0}],
+                "order": 0,
+                "game_template": self.template.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_game_template_rejects_min_players_above_max_players(self):
+        response = self.owner_client.post(
+            "/api/game-templates/",
+            {
+                "name": "Broken Numbers",
+                "min_players": 6,
+                "max_players": 5,
+                "role_slots": [
+                    {
+                        "role": self.default_role.id,
+                        "count": 5,
+                    }
+                ],
+                "phases": [
+                    {"name": "Night", "phase_type": "NIGHT", "order": 0},
+                    {"name": "Day", "phase_type": "DAY", "order": 1},
+                    {"name": "Voting", "phase_type": "VOTING", "order": 2},
+                ],
+                "win_conditions": [
+                    {
+                        "name": "Town Win",
+                        "winner_alignment": self.town.id,
+                        "criteria": [{"type": "ALIGNMENT_COUNT", "target": "MAFIA", "count": 0}],
+                        "order": 0,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_game_template_rejects_unknown_role_target_in_win_condition(self):
+        response = self.owner_client.post(
+            "/api/game-templates/",
+            {
+                "name": "Broken Target",
+                "min_players": 2,
+                "max_players": 2,
+                "role_slots": [
+                    {
+                        "role": self.default_role.id,
+                        "count": 2,
+                    }
+                ],
+                "phases": [
+                    {"name": "Night", "phase_type": "NIGHT", "order": 0},
+                    {"name": "Day", "phase_type": "DAY", "order": 1},
+                    {"name": "Voting", "phase_type": "VOTING", "order": 2},
+                ],
+                "win_conditions": [
+                    {
+                        "name": "Impossible Rule",
+                        "winner_alignment": self.town.id,
+                        "criteria": [{"type": "ROLE_COUNT", "target": "Ghost Role", "count": 0}],
+                        "order": 0,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_alignment_delete_is_blocked_when_used_by_role(self):
+        response = self.owner_client.delete(f"/api/alignments/{self.owner_alignment.id}/")
+
+        self.assertEqual(response.status_code, 400)
+        self.owner_alignment.refresh_from_db()
+
+    def test_alignment_delete_is_blocked_when_used_by_win_condition(self):
+        unused_alignment = Alignment.objects.create(
+            name="Independent",
+            game_template=self.template,
+        )
+        WinConditionTemplate.objects.create(
+            game_template=self.template,
+            name="Independent Win",
+            winner_alignment=unused_alignment,
+            criteria=[{"type": "ALIGNMENT_COUNT", "target": "INDEPENDENT", "count": 1}],
+            order=2,
+        )
+
+        response = self.owner_client.delete(f"/api/alignments/{unused_alignment.id}/")
+
+        self.assertEqual(response.status_code, 400)
+        unused_alignment.refresh_from_db()
+
+    def test_alignment_delete_succeeds_when_unused(self):
+        unused_alignment = Alignment.objects.create(
+            name="Hermit",
+            game_template=self.template,
+        )
+
+        response = self.owner_client.delete(f"/api/alignments/{unused_alignment.id}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Alignment.objects.filter(id=unused_alignment.id).exists())
 
 
 class NetworkSessionApiTests(TestCase):

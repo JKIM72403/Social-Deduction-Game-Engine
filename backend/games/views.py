@@ -41,6 +41,7 @@ from .serializers import (
     SubmitSessionActionSerializer,
     UserSerializer,
     WinConditionTemplateSerializer,
+    validate_criteria_targets,
 )
 from .session_runtime import apply_and_advance_phase, build_started_session_state
 from .session_state import (
@@ -283,17 +284,217 @@ class AlignmentViewSet(viewsets.ModelViewSet):
         owner_error = self._ensure_instance_owner(instance)
         if owner_error:
             return owner_error
+        if instance.roles.exists() or instance.win_conditions.exists():
+            return Response(
+                {"error": "Cannot delete an alignment that is still used by roles or win conditions."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return super().destroy(request, *args, **kwargs)
 
 
 class PhaseTemplateViewSet(viewsets.ModelViewSet):
-    queryset = PhaseTemplate.objects.all()
+    queryset = PhaseTemplate.objects.select_related("game_template", "game_template__creator")
     serializer_class = PhaseTemplateSerializer
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = PhaseTemplate.objects.select_related("game_template", "game_template__creator")
+        if self.action != "list":
+            return queryset
+
+        template_id = self.request.query_params.get("game_template")
+        if template_id:
+            template_filter = Q(game_template_id=template_id)
+        else:
+            template_filter = Q()
+
+        user = self.request.user
+        if user.is_authenticated:
+            return queryset.filter(template_filter & (Q(game_template__is_public=True) | Q(game_template__creator=user))).distinct()
+        return queryset.filter(template_filter & Q(game_template__is_public=True)).distinct()
+
+    def _ensure_owned_template_scope(self, data):
+        template_id = data.get("game_template")
+        if not template_id:
+            return None, Response(
+                {"error": "Phases must belong to a game template"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            template = GameTemplate.objects.get(id=template_id)
+        except GameTemplate.DoesNotExist:
+            return None, Response({"error": "Game template not found"}, status=status.HTTP_404_NOT_FOUND)
+        if template.creator_id != self.request.user.id:
+            return None, Response({"error": "Not the owner"}, status=status.HTTP_403_FORBIDDEN)
+        return template, None
+
+    def _ensure_instance_owner(self, instance):
+        if instance.game_template and instance.game_template.creator_id == self.request.user.id:
+            return None
+        return Response({"error": "Not the owner"}, status=status.HTTP_403_FORBIDDEN)
+
+    def create(self, request, *args, **kwargs):
+        template, scope_error = self._ensure_owned_template_scope(request.data)
+        if scope_error:
+            return scope_error
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(game_template=template)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        return super().destroy(request, *args, **kwargs)
 
 
 class WinConditionTemplateViewSet(viewsets.ModelViewSet):
-    queryset = WinConditionTemplate.objects.all()
+    queryset = WinConditionTemplate.objects.select_related("game_template", "game_template__creator")
     serializer_class = WinConditionTemplateSerializer
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = WinConditionTemplate.objects.select_related("game_template", "game_template__creator", "winner_alignment")
+        if self.action != "list":
+            return queryset
+
+        template_id = self.request.query_params.get("game_template")
+        if template_id:
+            template_filter = Q(game_template_id=template_id)
+        else:
+            template_filter = Q()
+
+        user = self.request.user
+        if user.is_authenticated:
+            return queryset.filter(template_filter & (Q(game_template__is_public=True) | Q(game_template__creator=user))).distinct()
+        return queryset.filter(template_filter & Q(game_template__is_public=True)).distinct()
+
+    def _ensure_owned_template_scope(self, data):
+        template_id = data.get("game_template")
+        if not template_id:
+            return None, Response(
+                {"error": "Win conditions must belong to a game template"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            template = GameTemplate.objects.get(id=template_id)
+        except GameTemplate.DoesNotExist:
+            return None, Response({"error": "Game template not found"}, status=status.HTTP_404_NOT_FOUND)
+        if template.creator_id != self.request.user.id:
+            return None, Response({"error": "Not the owner"}, status=status.HTTP_403_FORBIDDEN)
+        return template, None
+
+    def _ensure_instance_owner(self, instance):
+        if instance.game_template and instance.game_template.creator_id == self.request.user.id:
+            return None
+        return Response({"error": "Not the owner"}, status=status.HTTP_403_FORBIDDEN)
+
+    def _validate_criteria_targets(self, template, criteria):
+        role_names = set(
+            template.role_slots.select_related("role").values_list("role__name", flat=True)
+        )
+        alignment_names = set(
+            Alignment.objects.filter(Q(is_default=True) | Q(game_template=template)).values_list("name", flat=True)
+        )
+
+        try:
+            validate_criteria_targets(
+                criteria,
+                valid_role_names=role_names,
+                valid_alignment_names=alignment_names,
+            )
+        except Exception as exc:
+            detail = getattr(exc, "detail", {"error": str(exc)})
+            return Response(detail, status=status.HTTP_400_BAD_REQUEST)
+
+        return None
+
+    def create(self, request, *args, **kwargs):
+        template, scope_error = self._ensure_owned_template_scope(request.data)
+        if scope_error:
+            return scope_error
+
+        winner_alignment_id = request.data.get("winner_alignment")
+        if winner_alignment_id is None:
+            return Response(
+                {"winner_alignment": ["This field is required."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            winner_alignment = Alignment.objects.get(id=winner_alignment_id)
+        except Alignment.DoesNotExist:
+            return Response(
+                {"winner_alignment": ["Invalid alignment selected."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if winner_alignment.game_template_id and winner_alignment.game_template_id != template.id:
+            return Response(
+                {"winner_alignment": ["Winner alignment must belong to the same game template."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        criteria_error = self._validate_criteria_targets(template, request.data.get("criteria", []))
+        if criteria_error:
+            return criteria_error
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(game_template=template)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        criteria_error = self._validate_criteria_targets(instance.game_template, request.data.get("criteria", []))
+        if criteria_error:
+            return criteria_error
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        if "criteria" in request.data:
+            criteria_error = self._validate_criteria_targets(instance.game_template, request.data.get("criteria", []))
+            if criteria_error:
+                return criteria_error
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        owner_error = self._ensure_instance_owner(instance)
+        if owner_error:
+            return owner_error
+        return super().destroy(request, *args, **kwargs)
 
 
 class GameTemplateViewSet(viewsets.ModelViewSet):

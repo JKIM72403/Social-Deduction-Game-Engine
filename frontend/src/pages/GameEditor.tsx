@@ -73,6 +73,50 @@ function getGameValidationState(gameData: GameData): GameValidationState {
         errors.push("Add at least one role slot before saving.");
     }
 
+    if (gameData.phases.length === 0) {
+        errors.push("Add at least one phase before saving.");
+    }
+
+    const requiredPhaseTypes: Array<Phase['phase_type']> = ["NIGHT", "DAY", "VOTING"];
+    const phaseTypeCounts = gameData.phases.reduce<Record<string, number>>((acc, phase) => {
+        acc[phase.phase_type] = (acc[phase.phase_type] || 0) + 1;
+        return acc;
+    }, {});
+
+    requiredPhaseTypes.forEach((phaseType) => {
+        const count = phaseTypeCounts[phaseType] || 0;
+        if (count === 0) {
+            errors.push(`Missing required phase type: ${phaseType}.`);
+        }
+        if (count > 1) {
+            errors.push(`Only one ${phaseType} phase is supported.`);
+        }
+    });
+
+    if (gameData.win_conditions.length === 0) {
+        errors.push("Add at least one win condition before saving.");
+    }
+
+    const hasInvalidWinnerAlignment = gameData.win_conditions.some((wc) => !Number.isInteger(wc.winner_alignment) || wc.winner_alignment <= 0);
+    if (hasInvalidWinnerAlignment) {
+        errors.push("Every win condition must have a valid winner alignment.");
+    }
+
+    const hasInvalidCriteria = gameData.win_conditions.some((wc) => {
+        if (!wc.criteria || wc.criteria.length === 0) {
+            return true;
+        }
+        return wc.criteria.some((criterion) => {
+            if (criterion.type === 'SURVIVAL') {
+                return !Number.isInteger(criterion.count) || criterion.count < 0;
+            }
+            return !criterion.target || !Number.isInteger(criterion.count) || criterion.count < 0;
+        });
+    });
+    if (hasInvalidCriteria) {
+        errors.push("Each win condition must include at least one valid rule.");
+    }
+
     const invalidSlots = role_slots.filter(
         (slot) => !Number.isInteger(slot.count) || slot.count <= 0
     );

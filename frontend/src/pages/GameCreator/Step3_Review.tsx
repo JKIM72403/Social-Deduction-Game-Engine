@@ -31,6 +31,28 @@ export default function Step3_Review({ data, onSave, onBack }: Props) {
                 </ul>
             </div>
 
+            <div className="review-section">
+                <h3>Phases</h3>
+                <ul>
+                    {data.phases.map((phase) => (
+                        <li key={`${phase.phase_type}-${phase.order}`}>
+                            {phase.name} ({phase.phase_type})
+                        </li>
+                    ))}
+                </ul>
+            </div>
+
+            <div className="review-section">
+                <h3>Default Win Conditions</h3>
+                <ul>
+                    {data.win_conditions.map((winCondition, index) => (
+                        <li key={`${winCondition.name}-${index}`}>
+                            {winCondition.name}
+                        </li>
+                    ))}
+                </ul>
+            </div>
+
             <div className="actions">
                 <button onClick={onBack} className="btn-secondary">Back</button>
                 <button onClick={onSave} className="btn-primary">Create Game</button>

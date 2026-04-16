@@ -11,7 +11,7 @@ import Chip from '@mui/material/Chip';
 import Popover from '@mui/material/Popover';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { API } from "../services/api";
-import type { AbilityTemplate, RoleTemplate } from "../types";
+import type { AbilityTemplate, Alignment, RoleTemplate } from "../types";
 import { COLORS } from '../constants/colors';
 
 
@@ -41,10 +41,10 @@ const unselectedChipSx = {
 
 export default function RoleEditor({ roleId, gameId, onSave, onCancel }: Props) {
     const [abilities, setAbilities] = useState<AbilityTemplate[]>([]);
-    const [alignments, setAlignments] = useState<any[]>([]);
+    const [alignments, setAlignments] = useState<Alignment[]>([]);
     const [role, setRole] = useState({
         name: "",
-        alignment: "" as string | number,
+        alignment: 0,
         description: "",
         abilities: [] as number[],
     });
@@ -53,34 +53,51 @@ export default function RoleEditor({ roleId, gameId, onSave, onCancel }: Props) 
     const [popoverAbilityId, setPopoverAbilityId] = useState<number | null>(null);
 
     useEffect(() => {
-        // Fetch all abilities
-        API.get("/abilities/").then(res => setAbilities(res.data));
-        
-        // Fetch all alignments
-        const params = gameId ? { game_template: gameId } : undefined;
-        API.get("/alignments/", { params }).then(res => {
-            setAlignments(res.data);
-            if (!roleId && res.data.length > 0) {
-                // Default to Town if available
-                const town = res.data.find((a: any) => a.name.toUpperCase() === 'TOWN');
-                setRole(r => ({ ...r, alignment: town ? town.id : res.data[0].id }));
-            }
-        });
+        let cancelled = false;
 
-        // If editing an existing role, fetch its data
-        if (roleId) {
-            API.get(`/roles/${roleId}/`).then(res => {
-                const data = res.data;
-                // ability_details contains objects, we need IDs for the state
-                const abilityIds = data.ability_details ? data.ability_details.map((a: any) => a.id) : [];
-                setRole({
-                    name: data.name,
-                    alignment: data.alignment,
-                    description: data.description || "",
-                    abilities: abilityIds
-                });
-            });
-        }
+        const loadEditorState = async () => {
+            try {
+                const [abilitiesRes, alignmentsRes] = await Promise.all([
+                    API.get("/abilities/"),
+                    API.get("/alignments/", { params: gameId ? { game_template: gameId } : undefined }),
+                ]);
+                if (cancelled) {
+                    return;
+                }
+
+                setAbilities(abilitiesRes.data);
+                const loadedAlignments: Alignment[] = alignmentsRes.data;
+                setAlignments(loadedAlignments);
+
+                if (roleId) {
+                    const roleRes = await API.get(`/roles/${roleId}/`);
+                    if (cancelled) {
+                        return;
+                    }
+                    const data = roleRes.data;
+                    const abilityIds = data.ability_details ? data.ability_details.map((a: any) => a.id) : [];
+                    setRole({
+                        name: data.name,
+                        alignment: data.alignment,
+                        description: data.description || "",
+                        abilities: abilityIds,
+                    });
+                    return;
+                }
+
+                const town = loadedAlignments.find((a) => a.name.toUpperCase() === 'TOWN');
+                setRole((r) => ({ ...r, alignment: town ? town.id : loadedAlignments[0]?.id || 0 }));
+            } catch (e) {
+                console.error(e);
+                alert("Failed to load role editor data");
+            }
+        };
+
+        loadEditorState();
+
+        return () => {
+            cancelled = true;
+        };
     }, [roleId, gameId]);
 
     const toggleAbility = (id: number) => {
@@ -107,6 +124,16 @@ export default function RoleEditor({ roleId, gameId, onSave, onCancel }: Props) 
 
 
     const submit = async () => {
+        if (!role.name.trim()) {
+            alert("Role name is required");
+            return;
+        }
+
+        if (!role.alignment || role.alignment <= 0) {
+            alert("A valid alignment is required");
+            return;
+        }
+
         try {
             let res;
             const originalId = roleId;
@@ -143,7 +170,7 @@ export default function RoleEditor({ roleId, gameId, onSave, onCancel }: Props) 
                 <Select
                     value={role.alignment}
                     label="Alignment"
-                    onChange={e => setRole({ ...role, alignment: e.target.value })}
+                    onChange={e => setRole({ ...role, alignment: Number(e.target.value) })}
                 >
                     {alignments.map(a => (
                         <MenuItem key={a.id} value={a.id}>{a.name}</MenuItem>

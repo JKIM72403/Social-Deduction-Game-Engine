@@ -123,7 +123,7 @@ export default function Step2_Roles({ data, update, onNext, onBack }: Props) {
                             return (
                                 <Chip
                                     key={role.id}
-                                    label={`${role.name} (${role.alignment})`}
+                                    label={`${role.name} (${role.alignment_name || 'Unknown'})`}
                                     variant="outlined"
                                     onClick={() => addRoleToGame(role)}
                                     sx={{

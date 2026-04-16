@@ -51,13 +51,13 @@ const AlignmentManager = ({ gameId, onCancel }: AlignmentManagerProps) => {
     };
 
     const handleDelete = async (id: number) => {
-        if (!window.confirm('Are you sure you want to delete this alignment? Any roles or win conditions using this alignment will be reverted to the Town alignment.')) return;
+        if (!window.confirm('Are you sure you want to delete this alignment? Deletion is blocked while any role or win condition still uses it.')) return;
         try {
             await API.delete(`/alignments/${id}/`);
             fetchAlignments();
         } catch (e) {
             console.error('Failed to delete alignment', e);
-            alert('Failed to delete alignment.');
+            alert('Failed to delete alignment. Remove any roles or win conditions using it first.');
         }
     };
 
