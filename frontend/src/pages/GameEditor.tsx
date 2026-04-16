@@ -12,6 +12,8 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Sidebar from '../components/sidebar';
 import EditPanel from '../components/edit-panel';
 import { API } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { createSession } from '../services/sessions';
 import type { GameData, Phase, WinCondition, RoleSlot, RoleTemplate } from '../types';
 import type { Selection } from '../components/edit-panel';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -103,8 +105,10 @@ function getGameValidationState(gameData: GameData): GameValidationState {
 }
 
 const GameEditor = () => {
+    const { user } = useAuth();
     const navigate = useNavigate();
     const { id } = useParams();
+    const [creatingSessionFor, setCreatingSessionFor] = useState(false);
     const [gameData, setGameData] = useState<GameData>({
         name: "New Game",
         min_players: 4,
@@ -119,13 +123,13 @@ const GameEditor = () => {
         win_conditions: [
             {
                 name: "Town Victory (default)",
-                winner_alignment: 1, // Placeholder for Town
+                winner_alignment: 1, // Placeholder, updated by useEffect
                 order: 0,
                 criteria: [{ type: "ALIGNMENT_COUNT", target: "MAFIA", count: 0 }]
             },
             {
                 name: "Mafia Victory (default)",
-                winner_alignment: 2, // Placeholder for Mafia
+                winner_alignment: 2, // Placeholder, updated by useEffect
                 order: 1,
                 criteria: [{ type: "ALIGNMENT_COUNT", target: "TOWN", count: 0 }]
             }
@@ -172,6 +176,23 @@ const GameEditor = () => {
                     alert("Could not load game details.");
                     navigate("/");
                 });
+        } else {
+            // New Game: Fetch valid Alignment IDs for default win conditions
+            API.get("/alignments/").then(res => {
+                const town = res.data.find((a: any) => a.name.toUpperCase() === 'TOWN');
+                const mafia = res.data.find((a: any) => a.name.toUpperCase() === 'MAFIA');
+                if (town || mafia) {
+                    setGameData(prev => {
+                        const newWcs = [...prev.win_conditions];
+                        if (town && newWcs[0]) newWcs[0].winner_alignment = town.id;
+                        if (mafia && newWcs[1]) newWcs[1].winner_alignment = mafia.id;
+                        // Avoid invalid default IDs that cause DRF validation to reject the game POST
+                        if (!town && newWcs[0]) newWcs[0].winner_alignment = res.data[0]?.id || 1;
+                        if (!mafia && newWcs[1]) newWcs[1].winner_alignment = res.data[0]?.id || 2;
+                        return { ...prev, win_conditions: newWcs };
+                    });
+                }
+            }).catch(console.error);
         }
     }, [id, navigate]);
 
@@ -382,6 +403,25 @@ const GameEditor = () => {
         }
     };
 
+    const handleHostLobby = async () => {
+        if (!user || !id) {
+            navigate("/login");
+            return;
+        }
+
+        setCreatingSessionFor(true);
+        try {
+            const snapshot = await createSession(parseInt(id), user.username);
+            navigate(`/sessions/${snapshot.session.id}`);
+        } catch (err: any) {
+            console.error(err);
+            const message = err?.response?.data?.error || "Unable to create a lobby for that template right now.";
+            setSnackbar({ open: true, message, severity: 'error' });
+        } finally {
+            setCreatingSessionFor(false);
+        }
+    };
+
     return (
         <Box sx={{
             height: '100vh',
@@ -495,6 +535,38 @@ const GameEditor = () => {
                             Save Game
                         </Button>
                     </Box>
+                    {id && (
+                        <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+                            <Button
+                                variant="outlined"
+                                onClick={() => navigate(`/play-game/${id}`)}
+                                size="large"
+                                sx={{ 
+                                    color: 'white', 
+                                    borderColor: 'rgba(255,255,255,0.3)',
+                                    backgroundImage: 'linear-gradient(rgba(255,255,255,0.1), rgba(255,255,255,0.0))',
+                                    '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' }
+                                }}
+                            >
+                                Play Solo
+                            </Button>
+                            {user && (
+                                <Button
+                                    variant="contained"
+                                    onClick={handleHostLobby}
+                                    disabled={creatingSessionFor}
+                                    size="large"
+                                    sx={{ 
+                                        bgcolor: '#3b82f6', 
+                                        boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)',
+                                        '&:hover': { bgcolor: '#2563eb' }
+                                    }}
+                                >
+                                    {creatingSessionFor ? "Creating..." : "Host Lobby"}
+                                </Button>
+                            )}
+                        </Box>
+                    )}
                 </Box>
 
                 <EditPanel

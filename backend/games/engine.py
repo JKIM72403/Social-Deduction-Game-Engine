@@ -35,9 +35,10 @@ class KillAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         if target.status_effects.get("protected"):
             game.log("A kill attempt failed last night.", "protect", "all")
-        else:
+        elif target.is_alive:
             target.is_alive = False
             game.log(f"{target.name} was killed!", "kill", "all")
+
 
 
 class ProtectAbility(Ability):
@@ -151,7 +152,7 @@ class ImmuneKillAbility(Ability):
     def execute(self, source: 'Player', target: 'Player', game: 'GameEngine'):
         if target.status_effects.get("protected") or target.status_effects.get("jailed"):
             game.log("A kill attempt failed last night.", "protect", "all")
-        else:
+        elif target.is_alive:
             target.is_alive = False
             game.log(f"{target.name} was killed!", "kill", "all")
 

@@ -143,6 +143,7 @@ export default function PlayGame() {
     const [error, setError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [exitDialogOpen, setExitDialogOpen] = useState(false);
     const logsEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -257,9 +258,12 @@ export default function PlayGame() {
     const alivePlayers = gameState.players.filter((p) => p.is_alive);
     const eliminatedPlayers = gameState.players.filter((p) => !p.is_alive);
     const handleExitSoloGame = () => {
-        if (window.confirm("Exit this solo game? Your current run will be lost.")) {
-            navigate("/");
-        }
+        setExitDialogOpen(true);
+    };
+
+    const confirmExit = () => {
+        setExitDialogOpen(false);
+        navigate("/");
     };
 
     return (
@@ -666,6 +670,22 @@ export default function PlayGame() {
                     {actionError}
                 </Alert>
             </Snackbar>
+
+            <Dialog
+                open={exitDialogOpen}
+                onClose={() => setExitDialogOpen(false)}
+            >
+                <DialogTitle>Exit Solo Game?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Your current run will be lost. Are you sure you want to exit?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setExitDialogOpen(false)} color="secondary">Cancel</Button>
+                    <Button onClick={confirmExit} color="error" variant="contained">Exit</Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }
