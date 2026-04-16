@@ -83,7 +83,7 @@ class PhaseTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = PhaseTemplate
         fields = ["id", "name", "game_template", "phase_type", "order"]
-        read_only_fields = ["game_template"]
+        extra_kwargs = {"game_template": {"required": False}}
 
 
 class WinConditionTemplateSerializer(serializers.ModelSerializer):
@@ -92,7 +92,7 @@ class WinConditionTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = WinConditionTemplate
         fields = ["id", "name", "game_template", "winner_alignment", "winner_alignment_name", "criteria", "order"]
-        read_only_fields = ["game_template"]
+        extra_kwargs = {"game_template": {"required": False}}
 
 
 class GameTemplateSerializer(serializers.ModelSerializer):
