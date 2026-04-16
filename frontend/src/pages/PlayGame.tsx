@@ -3,7 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { API } from "../services/api";
 import {
     Box, Typography, Card, CardContent, Button, FormControl, Select, MenuItem,
-    Paper, List, ListItem, ListItemText, CircularProgress, Divider, Alert, Snackbar
+    Paper, List, ListItem, ListItemText, CircularProgress, Divider, Alert, Snackbar,
+    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
 } from "@mui/material";
 import {
     WarningAmberRounded as KillIcon,
